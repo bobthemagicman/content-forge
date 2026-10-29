@@ -37,6 +37,7 @@ by ingest when it writes directly (R5).
 | `archiveFileName` | String | ✔ | Original file name exactly as purchased |
 | `archiveBytes` | Float (bytes) | ✔ | > 0. Float because GraphQL `Int` is 32-bit, which can't hold multi-GB sizes |
 | `demoEntryPath` | String | | Only for `WEBSITE_TEMPLATE`. Relative path under `v/<id>/demo/`, no leading `/`, no `..`. Absent means no hosted demo |
+| `accentColor` | String | | `^#[0-9A-F]{6}$`. Dominant color of the largest thumbnail, from `sharp().stats().dominant` at ingest, darkened (hue kept) to a relative luminance of at most 0.2 so text over its glow stays AA. Tints the detail page's glow; absent → the UI uses the type accent |
 | `thumbKeys` | AWSJSON | ✔ | `{ "320": "v/<id>/thumb-320.<hash>.webp", "640": …, "1280": … }` |
 | `previewKeys` | [String] | | Ordered gallery images (screenshots, slides, large image) |
 | `videoPreviewKey` | String | | Only for `VIDEO`: `v/<id>/preview.<hash>.mp4` |
