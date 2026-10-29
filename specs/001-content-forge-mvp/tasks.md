@@ -307,6 +307,8 @@ that every story needs
 - [ ] T026 Create `amplify.yml`:
   - `backend.phases.build`: `nvm install 24 && nvm use 24`, `npm ci`,
     `npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID`;
+  - `frontend.phases.preBuild`: `aws s3 cp "$FONTS_S3_URI" src/app/fonts/ --recursive` (the
+    licensed Aeonik files are git-ignored; quickstart §2, step 5);
   - `frontend.phases.build`: `npm run build`;
   - `artifacts.baseDirectory: out`;
   - `cache` for `node_modules`;
@@ -331,21 +333,26 @@ that every story needs
 
 ### Front-end foundation
 
-- [ ] T028 [P] Define brand design tokens in `src/app/globals.css` with a Tailwind v4 `@theme`:
-  - colors `--color-bg #111111`, `--color-surface #303030`, `--color-surface-2 #222222`,
-    `--color-text #E5E5E5`, `--color-muted #AAAAAA`, `--color-primary #F2A524`,
-    `--color-secondary #B82471`, `--color-accent #AFFC41`;
+- [ ] T028 [P] Define brand design tokens in `src/app/globals.css` with a Tailwind v4 `@theme`,
+  copied from the "Tailwind v4 mapping" in `design-system/content-forge/MASTER.md`:
+  - colors (`bg`, `surface`, `raised`, text, lime `primary`, magenta `secondary` and
+    `secondary-text`, amber `callout` and `focus`, `danger`);
+  - radius and shadow scales reset (square corners, no shadows);
   - font variables `--font-heading` and `--font-body`;
   - a base dark background and text color;
   - a global amber `:focus-visible` ring;
   - a `@media (prefers-reduced-motion: reduce)` reset for `scroll-behavior` and transitions.
 - [ ] T029 [P] (owner files) Create `src/app/fonts.ts`:
-  - **Aeonik**: `next/font/local` pointing at `src/app/fonts/Aeonik-*.woff2`, which the owner
-    supplies, as `--font-heading`;
-  - **Lato** (400/700): `next/font/google`, as `--font-body`.
+  - **Aeonik**: `next/font/local` pointing at `src/app/fonts/Aeonik-Regular.woff2` (and `.woff`),
+    supplied by the owner (Regular weight only; set `font-synthesis: none`), as `--font-heading`;
+  - **Lato** (300/400/700): `next/font/google`, as `--font-body`.
 
-  Until the Aeonik files arrive, keep the `localFont` call commented out with a TODO and map
-  `--font-heading` to Lato.
+  The Aeonik files are git-ignored (the license doesn't allow publishing them in this public
+  repo). Add `scripts/fonts/ensure-fonts.mjs`, run from the `predev` and `prebuild` npm scripts:
+  if `src/app/fonts/Aeonik-Regular.woff2` or `.woff` is missing (CI, forks, fresh clones), copy
+  Lato 400 from the `@fontsource/lato` dev dependency into those paths as a stand-in and log a
+  warning, so the build never fails on a missing font. Amplify builds get the real files from
+  `FONTS_S3_URI` (T026).
 - [ ] T030 [P] Create `src/lib/auth/amplify-config.ts`. It exports an idempotent
   `configureAmplify()` that calls `Amplify.configure(outputs)` with
   `import outputs from '@/../amplify_outputs.json'`, and an `assetsBaseUrl()` getter that reads
@@ -360,8 +367,8 @@ that every story needs
     example `UNSTABLE_ToastRegion`, `UNSTABLE_ToastQueue`), import those here and nowhere else, so
     a later rename touches one file.
 
-  All use the brand tokens and amber focus rings, and none uses magenta for text below large-text
-  size.
+  All follow the component specs in `design-system/content-forge/MASTER.md`: brand tokens, amber
+  focus rings, lime for the one primary action, and no `#D92B83` text below large-text size.
 - [ ] T033 Create `src/app/providers.tsx` (`'use client'`). It calls `configureAmplify()` once and
   wraps children in React Aria `RouterProvider` (`navigate={router.push}` from `next/navigation`
   `useRouter`) and the toast region.
@@ -745,7 +752,8 @@ catalog shows the empty state (quickstart V5).
   content block:
   - `next/image` with the custom loader, `src={thumbKeys['320']}` (the loader picks the width,
     T038), and a fixed 16:10 aspect box;
-  - title, plus a type badge in secondary color at large-text size or as a non-text chip;
+  - title, plus a neutral type badge (`raised` fill, `#E5E5E5` text; see "Type badge" and
+    "Asset card" in `design-system/content-forge/MASTER.md`);
   - the type icon fallback;
   - `href` `/content/?slug=<slug>`.
 - [ ] T087 [US2] Implement `src/components/category-row.tsx`:

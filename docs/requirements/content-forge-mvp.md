@@ -1,6 +1,6 @@
 # Requirements: Content Forge — MVP
 
-**Status**: Approved for planning (v5) · **Date**: 2026-10-27 · **Owner**: Justen L. Britain · **Repo**: `bobthemagicman/content-forge`
+**Status**: Approved for planning (v6) · **Date**: 2026-10-27 · **Owner**: Justen L. Britain · **Repo**: `bobthemagicman/content-forge`
 
 ## Revision History
 | Version | Change |
@@ -10,6 +10,7 @@
 | v3 | Resolved open questions: PowerPoints are stored only as the original zip plus slide previews. Subdomains confirmed, DNS in Route 53. Decks are `.ppt`/`.pptx` only. Purchase history is exportable, so ingest adds a purchase-history import. |
 | v4 | Cognito + Amplify Gen 2 approved. Aeonik licensed. Purchase-history import deferred to Should-have. No asset has been used on a project yet. All MVP decisions resolved. |
 | v5 | Clarified as a personal project: the owner bought and personally owns every asset. Audience wording updated to match. `example.com` is a placeholder for the owner's domain, set per deployment. Sign-in is still limited to one Google Workspace domain. No design changes. |
+| v6 | Brand color roles aligned with the owner's brand standards (Confluence): lime primary actions, magenta `#D92B83` secondary actions, amber callouts and focus rings. Full design system added at `design-system/content-forge/`. Aeonik files supplied (Regular weight). |
 
 ## Summary
 
@@ -204,7 +205,7 @@ Content Forge is a private web catalog for the owner's personally purchased digi
 - WCAG 2.1 AA.
 - Interactive UI is built with **React Aria Components**, with `RouterProvider` wired to Next's `useRouter` so React Aria links use client-side navigation.
 - Rows can be navigated by keyboard and focus is visible. Scroll buttons are labeled. `prefers-reduced-motion` is respected.
-- Brand magenta `#B82471` on `#111` is about 3.2:1. Use it only for large text, icons, or non-text accents. Use amber `#F2A524` (about 9:1 on `#111`) or `#E5E5E5` for body text and interactive labels.
+- Brand magenta `#D92B83` on `#111` is about 4.2:1. Use it only for borders, fills, underlines, and large text. Magenta text uses the lighter tint `#EE77AE` (about 7:1 on `#111`). Focus rings are amber `#F2A524` (about 9:1 on `#111`). Full contrast table: `design-system/content-forge/MASTER.md`.
 
 ### NFR-4: Maintainability (agentic development)
 - TypeScript strict mode, and ESLint runs on the Amplify build.
@@ -359,18 +360,18 @@ tools/ingest/                 batch ingest CLI
 ---
 
 ## Branding
-Supplied by the owner (the logo and final assets are still to come):
+Follows the owner's brand standards (Confluence: Corporate Brand & Marketing Standards, and Visual Standards — Do & Don't). The logo and final assets are still to come. The full design system, with component specs and the contrast table, is in [`design-system/content-forge/MASTER.md`](../../design-system/content-forge/MASTER.md).
 
 | Token | Value | Use |
 |---|---|---|
 | `--color-bg` | `#111111` | Page background (dark theme) |
-| `--color-surface` | `#303030` / `#222222` | Cards, header, panels |
-| `--color-text` | `#E5E5E5` | Body text |
-| `--color-muted` | `#999999` / `#AAAAAA` | Secondary text |
-| `--color-primary` | `#F2A524` (amber) | Primary actions, focus rings, links |
-| `--color-secondary` | `#B82471` (magenta) | Accents, badges (large text/non-text only) |
-| `--color-accent` | `#AFFC41` (lime) | Sparing highlights |
-| Heading font | Aeonik | Commercial typeface. The existing license covers this app |
+| `--color-surface` / `--color-raised` | `#222222` / `#303030` | Cards and panels / header, menus, dialogs |
+| `--color-text` | `#E5E5E5` | Body text (headings `#FFFFFF`) |
+| `--color-text-muted` | `#AAAAAA` | Secondary text |
+| `--color-primary` | `#AFFC41` (lime), text `#303030` | Primary actions (one per view), active states |
+| `--color-secondary` | `#D92B83` (magenta) | Secondary actions, badges, underlines. Text in magenta uses `#EE77AE` |
+| `--color-callout` / `--color-focus` | `#F2A524` (amber) | Callouts, success states, focus rings |
+| Heading font | Aeonik (Regular) | Commercial typeface. The existing license covers this app. Files in `src/app/fonts/` |
 | Body font | Lato | |
 | Logo | `Logo_White_Text.svg` | White wordmark for dark backgrounds |
 
