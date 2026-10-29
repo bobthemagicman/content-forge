@@ -78,3 +78,7 @@ ingest-report*.json
 
 # claude code (per-user local settings; shared skills in .claude/skills are committed)
 .claude/settings.local.json
+
+# licensed fonts: not redistributable, so never committed (see quickstart §2, step 5)
+src/app/fonts/*.woff
+src/app/fonts/*.woff2
