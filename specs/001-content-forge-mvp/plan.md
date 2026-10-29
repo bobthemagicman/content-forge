@@ -7,8 +7,9 @@
 
 ## Summary
 
-Content Forge is an internal catalog where Example Co employees browse, preview, and download the
-company's purchased templates and media.
+Content Forge is a private catalog where the owner (and any users they invite) browse, preview,
+and download the owner's personally purchased templates and media. `example.com` stands in for
+the owner's domain throughout.
 
 - **Front end**: a **Next.js 16 static export** (App Router, React Aria Components, Tailwind v4) on
   **Amplify Hosting** at `content.example.com`. Pages are static shells, and all data loads on
