@@ -307,6 +307,8 @@ that every story needs
 - [ ] T026 Create `amplify.yml`:
   - `backend.phases.build`: `nvm install 24 && nvm use 24`, `npm ci`,
     `npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID`;
+  - `frontend.phases.preBuild`: `aws s3 cp "$FONTS_S3_URI" src/app/fonts/ --recursive` (the
+    licensed Aeonik files are git-ignored; quickstart §2, step 5);
   - `frontend.phases.build`: `npm run build`;
   - `artifacts.baseDirectory: out`;
   - `cache` for `node_modules`;
@@ -331,21 +333,28 @@ that every story needs
 
 ### Front-end foundation
 
-- [ ] T028 [P] Define brand design tokens in `src/app/globals.css` with a Tailwind v4 `@theme`:
-  - colors `--color-bg #111111`, `--color-surface #303030`, `--color-surface-2 #222222`,
-    `--color-text #E5E5E5`, `--color-muted #AAAAAA`, `--color-primary #F2A524`,
-    `--color-secondary #B82471`, `--color-accent #AFFC41`;
+- [ ] T028 [P] Define brand design tokens in `src/app/globals.css` with a Tailwind v4 `@theme`,
+  copied from the "Tailwind v4 mapping" in `design-system/content-forge/MASTER.md`:
+  - colors (`bg`, `surface`, `raised`, text, lime `primary`, magenta `secondary` and
+    `secondary-text`, amber `callout` and `focus`, `danger`);
+  - the radius scale (`sm` 6, `md` 12, `lg` 16, `xl` 18, `full`) and glow shadows, replacing
+    Tailwind's defaults;
+  - `--gradient-hot`, the page background glows, and the per-type `--accent-rgb` selectors;
   - font variables `--font-heading` and `--font-body`;
   - a base dark background and text color;
   - a global amber `:focus-visible` ring;
   - a `@media (prefers-reduced-motion: reduce)` reset for `scroll-behavior` and transitions.
 - [ ] T029 [P] (owner files) Create `src/app/fonts.ts`:
-  - **Aeonik**: `next/font/local` pointing at `src/app/fonts/Aeonik-*.woff2`, which the owner
-    supplies, as `--font-heading`;
-  - **Lato** (400/700): `next/font/google`, as `--font-body`.
+  - **Aeonik**: `next/font/local` pointing at `src/app/fonts/Aeonik-Regular.woff2` (and `.woff`),
+    supplied by the owner (Regular weight only; set `font-synthesis: none`), as `--font-heading`;
+  - **Lato** (300/400/700): `next/font/google`, as `--font-body`.
 
-  Until the Aeonik files arrive, keep the `localFont` call commented out with a TODO and map
-  `--font-heading` to Lato.
+  The Aeonik files are git-ignored (the license doesn't allow publishing them in this public
+  repo). Add `scripts/fonts/ensure-fonts.mjs`, run from the `predev` and `prebuild` npm scripts:
+  if `src/app/fonts/Aeonik-Regular.woff2` or `.woff` is missing (CI, forks, fresh clones), copy
+  Lato 400 from the `@fontsource/lato` dev dependency into those paths as a stand-in and log a
+  warning, so the build never fails on a missing font. Amplify builds get the real files from
+  `FONTS_S3_URI` (T026).
 - [ ] T030 [P] Create `src/lib/auth/amplify-config.ts`. It exports an idempotent
   `configureAmplify()` that calls `Amplify.configure(outputs)` with
   `import outputs from '@/../amplify_outputs.json'`, and an `assetsBaseUrl()` getter that reads
@@ -360,8 +369,8 @@ that every story needs
     example `UNSTABLE_ToastRegion`, `UNSTABLE_ToastQueue`), import those here and nowhere else, so
     a later rename touches one file.
 
-  All use the brand tokens and amber focus rings, and none uses magenta for text below large-text
-  size.
+  All follow the component specs in `design-system/content-forge/MASTER.md`: brand tokens, amber
+  focus rings, lime for the one primary action, and no `#D92B83` text below large-text size.
 - [ ] T033 Create `src/app/providers.tsx` (`'use client'`). It calls `configureAmplify()` once and
   wraps children in React Aria `RouterProvider` (`navigate={router.push}` from `next/navigation`
   `useRouter`) and the toast region.
@@ -605,7 +614,11 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - `validate.ts`: enum, URL, date, and slug checks returning field errors.
 - [ ] T067 [P] [US4] Implement `tools/ingest/generate/image.ts` with `sharp`: write WebP thumbs at
   320/640/1280 and a 2048 preview, all named with the item's import hash, and return
-  `{ thumbKeys, previewKeys, meta: { width, height, format } }`. Used for `IMAGE` and `TEXTURE`.
+  `{ thumbKeys, previewKeys, accentColor, meta: { width, height, format } }`. `accentColor` is
+  `sharp(...).stats()`'s `dominant` color of the largest thumb, darkened to relative luminance
+  ≤ 0.2 and written as upper-case `#RRGGBB`, with a unit test for a white and a yellow input (see
+  [data-model.md](./data-model.md#entity-content)). Used for `IMAGE` and `TEXTURE`, and by every
+  other generator that makes its thumbs through `image.ts`.
 - [ ] T068 [P] [US4] Implement `tools/ingest/generate/video.ts`:
   - `ffprobe` JSON gives the duration, width, height, codec, and fps;
   - the poster comes from `ffmpeg -ss <10%> -frames:v 1` and is resized through `image.ts`;
@@ -745,7 +758,9 @@ catalog shows the empty state (quickstart V5).
   content block:
   - `next/image` with the custom loader, `src={thumbKeys['320']}` (the loader picks the width,
     T038), and a fixed 16:10 aspect box;
-  - title, plus a type badge in secondary color at large-text size or as a non-text chip;
+  - title, plus a type badge (accent dot + muted label; see "Type badge" and "Asset card" in
+    `design-system/content-forge/MASTER.md`);
+  - a `data-type` attribute so the card picks up its type's `--accent-rgb` for the hover glow;
   - the type icon fallback;
   - `href` `/content/?slug=<slug>`.
 - [ ] T087 [US2] Implement `src/components/category-row.tsx`:
@@ -760,7 +775,8 @@ catalog shows the empty state (quickstart V5).
   exported, otherwise the `onLoadMore` API. Record the API used in
   `specs/001-content-forge-mvp/research.md` (R12).
 - [ ] T088 [US2] Replace the placeholder `src/app/(app)/browse/page.tsx` with the real page:
-  - an `h1` "Browse";
+  - the hero from `design-system/content-forge/pages/browse.md`: an `h1` "Browse", the lead line,
+    and the jump tiles (links to `#row-<routeSlug>`, hidden for empty types and below 768px);
   - one `useRow` per `CONTENT_TYPES` entry, all fetched in parallel;
   - three skeleton rows while loading;
   - rows with zero items are hidden, and "No content yet." shows when all are empty;
@@ -853,7 +869,9 @@ goes up by one. Unknown slugs show not-found (quickstart V6, V7).
   - states: loading skeleton, not-found (missing, no match, or `DRAFT`), and an error `Banner` with
     retry;
   - an `h1` title, a basic preview (the largest thumb through `next/image`, or the type icon),
-    `DetailFacts`, and `DetailActions`.
+    `DetailFacts`, and `DetailActions`;
+  - the item glow: `--item-glow` set from `accentColor`, falling back to the type accent (see
+    `design-system/content-forge/pages/detail.md`).
 
   Follow [contracts/ui-routes.md](./contracts/ui-routes.md#page-states).
 - [ ] T100 [US3] Create `tests/smoke/us3-download.smoke.ts`. Against the deployed environment:
