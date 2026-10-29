@@ -1,32 +1,32 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.0.2 → 1.0.3
-Bump rationale: PATCH. Clarified that Content Forge is a personal project: the owner bought and
-personally owns every asset in the library. Audience wording updated to match. `example.com`
-is now a placeholder for the owner's domain, set per deployment. No principle or rule changed
-meaning: sign-in is still restricted to one Google Workspace domain.
+Version change: 1.0.3 → 1.0.4
+Bump rationale: PATCH. Brand color roles aligned with the owner's brand standards (Confluence:
+Corporate Brand & Marketing Standards): lime is the primary action color, magenta `#D92B83` the
+secondary, amber is for callouts and focus rings. The detailed system now lives in
+`design-system/content-forge/MASTER.md`. No principle changed meaning: the contrast rule in
+Principle IV is the same, with the example updated to the new magenta.
 
 Modified principles:
-  - I. Cost Discipline: "an internal tool" → "a personal project"
-  - II. Server-Enforced Access & Asset Isolation: audience and domain wording; rationale names the
-    owner
-  - IV. Accessible by Default: rationale wording
+  - IV. Accessible by Default: contrast example now names magenta `#D92B83` (4.2:1 on `#111`)
 Modified sections:
-  - Technology & Platform Constraints: domains → `example.com` placeholder; branding renamed to
-    Content Forge identity
+  - Technology & Platform Constraints: Branding color roles; points to the design system
 
 Added sections: none
 Removed sections: none
 
 Dependent artifacts (read the constitution at runtime; not modified by this command):
   - .specify/templates/*: no change needed
-  - docs/requirements/content-forge-mvp.md, specs/001-content-forge-mvp/*, README.md: same wording
-    and domain changes in the same change
+  - docs/requirements/content-forge-mvp.md (NFR-3, Branding), specs/001-content-forge-mvp/
+    contracts/ui-routes.md, specs/001-content-forge-mvp/tasks.md (T028, T029, T032): updated in
+    the same change
 
 Deferred TODOs: none
 
 History:
+  - 1.0.3 (2026-10-28): Content Forge clarified as a personal project; `example.com` placeholder
+    domain.
   - 1.0.2 (2026-10-28): primary branch renamed from `main` to `master`.
   - 1.0.1 (2026-10-27): Principle V defines end-to-end tests for non-UI journeys (ingest CLI).
   - 1.0.0 (2026-10-27): first ratification; principles I–VI, Technology & Platform Constraints,
@@ -102,7 +102,7 @@ zero. Infrastructure as code keeps the environment reproducible and reviewable.
   focus, and screen-reader behavior. Everything MUST be keyboard-operable, with visible focus.
 - Automated accessibility checks (axe) MUST report zero violations on core pages in CI.
 - Text MUST meet contrast ratios against its background. Brand colors that fail 4.5:1 (e.g.,
-  magenta `#B82471` on `#111`) are limited to large text and non-text accents.
+  magenta `#D92B83` on `#111`, 4.2:1) are limited to large text and non-text accents.
 - Motion MUST respect `prefers-reduced-motion`. Every image MUST have meaningful alternative text.
 
 **Rationale**: The app may be shared with other invited users, and accessibility retrofitted
@@ -156,8 +156,10 @@ development is most reliable.
   MySQL-compatible) MUST be reached via the RDS Data API, without VPC-attached compute.
 - **Domains**: App at `content.example.com`. Assets/demos at `assets.example.com`.
   DNS in Route 53. `example.com` is a placeholder for the owner's domain, set per deployment.
-- **Branding**: Content Forge identity: dark theme (`#111` background), amber `#F2A524`
-  primary, magenta `#B82471` secondary, lime `#AFFC41` accent, Aeonik headings, Lato body.
+- **Branding**: Content Forge identity, following the owner's brand standards: dark theme
+  (`#111` background), lime `#AFFC41` primary actions, magenta `#D92B83` secondary actions, amber
+  `#F2A524` callouts and focus rings, Aeonik headings, Lato body. The full system is
+  `design-system/content-forge/MASTER.md`.
 - **Browsers**: latest two versions of Chrome, Edge, Firefox, Safari. Desktop first, usable at
   tablet width.
 - Changing any constraint in this section requires a constitution amendment.
@@ -191,4 +193,4 @@ development is most reliable.
   phase (e.g., usage tracking).
 - Use `AGENTS.md` for day-to-day development guidance.
 
-**Version**: 1.0.3 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-28
+**Version**: 1.0.4 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-28

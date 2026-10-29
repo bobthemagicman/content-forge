@@ -49,5 +49,6 @@ and [assets-cdn.md](./assets-cdn.md)).
 - Previous/next scroll buttons have `aria-label="Scroll <Type> left/right"` and are hidden from
   assistive tech when they can't scroll.
 - The page has one `h1`. Row titles are `h2`. The detail page title is `h1`.
-- Focus rings use the amber `#F2A524` color. Text never uses magenta `#B82471` below large-text size.
+- Focus rings use the amber `#F2A524` color. Text never uses magenta `#D92B83` below large-text
+  size; magenta text uses the `#EE77AE` tint. Styling follows `design-system/content-forge/`.
 - `prefers-reduced-motion: reduce` turns off smooth scrolling and hover scale.
