@@ -130,11 +130,11 @@ that every story needs
   - files: `package.json` (`aws-cdk-lib`, `constructs`, `aws-cdk`), `cdk.json`, `tsconfig.json`
     (strict, checked by the root `typecheck` script), `bin/edge-cert.ts`
     (`env.region = 'us-east-1'`), and `lib/edge-cert-stack.ts`;
-  - the stack: an ACM `Certificate` for `assets.entropy-forge.io`, DNS-validated against
+  - the stack: an ACM `Certificate` for `assets.example.com`, DNS-validated against
     `HostedZone.fromHostedZoneAttributes` using context `hostedZoneId`, with `CfnOutput`
     `AssetsCertArn` (research R10).
 - [ ] T011 [P] Write CDK assertion tests for `infra/edge-cert` in `tests/infra/edge-cert.test.ts`:
-  the cert's domain is `assets.entropy-forge.io`, it uses DNS validation, the stack region is
+  the cert's domain is `assets.example.com`, it uses DNS validation, the stack region is
   `us-east-1`, and the output `AssetsCertArn` exists.
 - [ ] T012 [P] Create `scripts/bootstrap/create-signing-keys.sh` (`--env <name> --profile <p>
   [--rotate]`). `<name>` is `master` or `sandbox-<username>` (research R19). The script:
@@ -159,19 +159,19 @@ that every story needs
 ### Backend: auth, data, asset plane
 
 - [ ] T014 Create `amplify/auth/pre-sign-up/resource.ts` (`defineFunction({ name: 'pre-sign-up',
-  runtime: 24, logging: { retention: '2 weeks' }, environment: { ALLOW_DOMAIN: 'entropy-forge.io' } })`)
+  runtime: 24, logging: { retention: '2 weeks' }, environment: { ALLOW_DOMAIN: 'example.com' } })`)
   and
   `amplify/auth/pre-sign-up/handler.ts`. The handler:
   - lower-cases `event.request.userAttributes.email`;
-  - throws `Error('ONLY_COMPANY_ACCOUNTS')` unless the email ends exactly with `@entropy-forge.io`;
+  - throws `Error('ONLY_ALLOWED_DOMAIN')` unless the email ends exactly with `@example.com`;
   - applies to every `triggerSource`, including `PreSignUp_ExternalProvider` (research R3,
     FR-001/002).
 - [ ] T015 [P] Write unit tests in `tests/unit/auth/pre-sign-up.test.ts`. Cover:
-  - `user@entropy-forge.io` accepted;
-  - `USER@Entropy-Forge.io` accepted;
+  - `user@example.com` accepted;
+  - `USER@Example.com` accepted;
   - `user@gmail.com` rejected;
-  - `user@entropy-forge.io.evil.com` rejected;
-  - `user@sub.entropy-forge.io` rejected;
+  - `user@example.com.evil.com` rejected;
+  - `user@sub.example.com` rejected;
   - missing email rejected;
   - `PreSignUp_ExternalProvider` and `PreSignUp_AdminCreateUser` sources.
 - [ ] T016 Create `amplify/auth/resource.ts` with `defineAuth`:
@@ -179,9 +179,9 @@ that every story needs
   - `externalProviders.google` with `clientId: secret('GOOGLE_CLIENT_ID')`,
     `clientSecret: secret('GOOGLE_CLIENT_SECRET')`, scopes `openid email profile`, and
     `attributeMapping` for `email`, `fullname`/`name`, `profilePicture`/`picture`;
-  - `callbackUrls`: `https://content.entropy-forge.io/auth/callback/` and
+  - `callbackUrls`: `https://content.example.com/auth/callback/` and
     `http://localhost:3000/auth/callback/`;
-  - `logoutUrls`: `https://content.entropy-forge.io/` and `http://localhost:3000/`;
+  - `logoutUrls`: `https://content.example.com/` and `http://localhost:3000/`;
   - `triggers: { preSignUp }`.
 - [ ] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
   [data-model.md](./data-model.md#entity-content):
@@ -197,7 +197,7 @@ that every story needs
   **Verify R4** with `npx ampx sandbox`:
   - Do the two index queries still exist after `disableOperations(['queries'])`? If not, disable
     only `mutations` and `subscriptions`, and add to spec.md Assumptions that drafts are readable
-    by signed-in employees through the API.
+    by signed-in users through the API.
   - Does the `type` enum work as an index partition key? If not, make it `a.string()`, validated
     against `CONTENT_TYPES` by ingest.
 
@@ -239,7 +239,7 @@ that every story needs
 - [ ] T020 [P] Create `amplify/custom/assets-cdn/session-handler.ts`, a Lambda function URL handler
   per [contracts/assets-cdn.md](./contracts/assets-cdn.md#get-_session):
   - **`GET /_session`**: validate `Origin` against `ALLOWED_ORIGINS`. Verify `X-Id-Token` with
-    `CognitoJwtVerifier` (`tokenUse: 'id'`). Require an `@entropy-forge.io` email. Sign cookies with
+    `CognitoJwtVerifier` (`tokenUse: 'id'`). Require an `@example.com` email. Sign cookies with
     `getSignedCookies` (custom policy, resource `https://<asset host>/v/*`, 12 h). Return `204`
     with three `Set-Cookie` headers and `X-Session-Expires`. Cookie attributes depend on
     `COOKIE_MODE`:
@@ -266,7 +266,7 @@ that every story needs
   - a valid token gives `204` with exactly three cookies, each with the required attributes;
   - the policy resource is `/v/*` with a 12 h expiry;
   - missing token → `401`, expired or invalid token → `401`;
-  - non-company email → `403`, disallowed origin → `403`;
+  - email outside the allowed domain → `403`, disallowed origin → `403`;
   - with `COOKIE_MODE=cross-site`, the cookies have no `Domain` and use `SameSite=None; Secure`;
   - signout clears all three cookies;
   - preflight returns the CORS headers;
@@ -296,8 +296,8 @@ that every story needs
   - read `amplify/custom/assets-cdn/keys/<envName>.public-key.pem`. If it's missing, throw an error
     telling the developer to run `scripts/bootstrap/create-signing-keys.sh --env <envName>`;
   - `backend.createStack('assets')` with `new AssetsCdn(...)`, fed from `backend.auth.resources`,
-    the key file, `allowedOrigins` (`https://content.entropy-forge.io` in production,
-    `http://localhost:3000` otherwise), and in production `assetsDomain: 'assets.entropy-forge.io'`,
+    the key file, `allowedOrigins` (`https://content.example.com` in production,
+    `http://localhost:3000` otherwise), and in production `assetsDomain: 'assets.example.com'`,
     `process.env.ASSETS_CERT_ARN`, and `process.env.HOSTED_ZONE_ID`;
   - a CDK override on the Cognito user pool: `adminCreateUserConfig.allowAdminCreateUserOnly =
     true` (to verify in T054, research R3), and refresh-token validity of 7 days on the app client;
@@ -323,7 +323,7 @@ that every story needs
   3. create the Internal Google OAuth client;
   4. connect the Amplify app in `us-west-2`, set secrets `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
      and env `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, `BUDGET_ALERT_EMAIL`, and map
-     `content.entropy-forge.io`.
+     `content.example.com`.
 
   Then deploy the skeleton and **verify R2**: does platform `WEB` with `out/` serve correctly, or
   is the "Web" framework override needed? Record the outcome in
@@ -368,7 +368,7 @@ that every story needs
 - [ ] T034 Update `src/app/layout.tsx`:
   - `<html lang="en">` with the font variables from `src/app/fonts.ts`;
   - `<body>` wrapped in `Providers`;
-  - `metadata` title "Content Forge · Entropy Forge" and `robots: { index: false }`.
+  - `metadata` title "Content Forge" and `robots: { index: false }`.
 - [ ] T035 Create `src/lib/auth/auth-provider.tsx` and `src/lib/auth/use-session.ts`:
   - `AuthProvider` (client) resolves `fetchAuthSession()` and `fetchUserAttributes()`, and exposes
     `{ status: 'loading'|'signedIn'|'signedOut', user: { email, name, picture }, idToken(),
@@ -437,14 +437,14 @@ providers and test harnesses exist, and user story work can start.
 
 ---
 
-## Phase 3: User Story 1 - Sign in with a company account (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Sign in with an allowed account (Priority: P1) 🎯 MVP
 
-**Goal**: A public landing page plus Google Workspace sign-in limited to `@entropy-forge.io`.
+**Goal**: A public landing page plus Google Workspace sign-in limited to `@example.com`.
 Signed-in users reach the browse page. Everyone else is refused, and nothing in the catalog is
 reachable without signing in.
 
-**Independent Test**: With an empty catalog, a company account reaches `/browse/`. A personal Gmail
-account is rejected with "company accounts only". Direct requests for catalog pages or assets
+**Independent Test**: With an empty catalog, an allowed account reaches `/browse/`. A personal Gmail
+account is rejected with "authorized accounts only". Direct requests for catalog pages or assets
 without a session are denied (quickstart V1–V4, V12).
 
 ### Tests for User Story 1
@@ -454,7 +454,7 @@ without a session are denied (quickstart V1–V4, V12).
   - `/` shows the sign-in button and makes **no** AppSync or asset requests;
   - clicking "Sign in with Google" navigates to the Cognito `/oauth2/authorize` URL with
     `identity_provider=Google`;
-  - `/?error=domain` shows "company accounts only";
+  - `/?error=domain` shows "authorized accounts only";
   - a signed-in user visiting `/` is redirected to `/browse/`;
   - a signed-out user visiting `/browse/` is redirected to `/`;
   - sign-out calls `/_session/signout` and lands on `/`;
@@ -474,7 +474,7 @@ without a session are denied (quickstart V1–V4, V12).
   - listen to the Amplify `Hub` `auth` channel (`signInWithRedirect`,
     `signInWithRedirect_failure`) and parse `error_description` from the URL;
   - on success, `router.replace('/browse/')`;
-  - on an error containing `ONLY_COMPANY_ACCOUNTS` or `PreSignUp`, go to `/?error=domain`; on any
+  - on an error containing `ONLY_ALLOWED_DOMAIN` or `PreSignUp`, go to `/?error=domain`; on any
     other error, `/?error=signin`;
   - show a skeleton while waiting.
 - [ ] T049 [P] [US1] Implement `src/components/app-header.tsx`: the wordmark linking to `/browse/`,
@@ -506,7 +506,7 @@ without a session are denied (quickstart V1–V4, V12).
   - run quickstart V1–V4 and V12, and record the R3 outcome in
     `specs/001-content-forge-mvp/research.md`.
 
-**Checkpoint**: US1 works on its own. Only company accounts get in, and nothing in the catalog is
+**Checkpoint**: US1 works on its own. Only allowed accounts get in, and nothing in the catalog is
 exposed.
 
 ---
@@ -786,7 +786,7 @@ goes up by one. Unknown slugs show not-found (quickstart V6, V7).
 
 - [ ] T090 [P] [US3] Write unit tests in `tests/unit/functions/get-download-url.test.ts`, mocking
   DynamoDB, S3, and SSM with `aws-sdk-client-mock`. Cover:
-  - **errors**: a non-company email → `Unauthorized`; a missing item → `NotFound`; a `DRAFT` →
+  - **errors**: a email outside the allowed domain → `Unauthorized`; a missing item → `NotFound`; a `DRAFT` →
     `NotFound`; `HeadObject` 404 → `ArchiveMissing`;
   - **success**: the URL is signed for `https://<asset host>/<archiveKey>` and `expiresAt` is
     now + 300 s ± 1 s;

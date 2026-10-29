@@ -7,7 +7,7 @@ three stores:
 
 | Store | Owner | Purpose |
 |---|---|---|
-| `Content` (Amplify Data model → DynamoDB table + AppSync) | `amplify/data/resource.ts` | The catalog. Employees read it through the API. Ingest and the download function write it directly |
+| `Content` (Amplify Data model → DynamoDB table + AppSync) | `amplify/data/resource.ts` | The catalog. Users read it through the API. Ingest and the download function write it directly |
 | `DownloadEvents` (plain DynamoDB table) | `AssetsCdn` construct | Append-only download log. Not exposed through the API |
 | S3 bucket (`content-forge-assets-<env>`) | `AssetsCdn` construct | Original archives (`a/`) and viewable assets (`v/`) |
 
@@ -103,7 +103,7 @@ Values in row order, which is also the display order (FR-007):
 |---|---|---|---|
 | `contentId` | S | Partition | `Content.id` |
 | `downloadedAtEmail` | S | Sort | `<ISO-8601 UTC>#<email>`, which keeps entries unique and in time order |
-| `email` | S | | Lower-case. Domain must be `entropy-forge.io` |
+| `email` | S | | Lower-case. Domain must be `example.com` |
 | `downloadedAt` | S | | ISO-8601 UTC |
 | `archiveKey` | S | | Snapshot of the key served |
 
@@ -112,7 +112,7 @@ Values in row order, which is also the display order (FR-007):
 
 ---
 
-## Entity: Employee (User)
+## Entity: User
 
 Not stored by the app. Comes from the Cognito user pool, federated from Google.
 
@@ -166,7 +166,7 @@ immutable`. `demo/**` gets `max-age=3600`. `a/` objects get `Cache-Control: priv
 
 | Rule | Source | Enforced in |
 |---|---|---|
-| Only `@entropy-forge.io` identities | FR-001/002 | Pre-sign-up trigger, session Lambda, download function |
+| Only `@example.com` identities | FR-001/002 | Pre-sign-up trigger, session Lambda, download function |
 | Download URL ≤ 5 min | FR-018 | Download function (canned policy expiry) |
 | Archive paths safe, size-capped | FR-032 | Ingest extractor |
 | Demo path has no traversal | FR-034 | Ingest (normalize + reject `..`) |

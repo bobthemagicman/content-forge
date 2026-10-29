@@ -61,10 +61,10 @@ they're the first tasks of implementation.
 - **Decision**:
   - `defineAuth` with `externalProviders.google` (`clientId`/`clientSecret` from Amplify
     `secret()`), scopes `openid email profile`, and `attributeMapping` for email, name, picture.
-  - Callback URL `https://content.entropy-forge.io/auth/callback/` plus a localhost equivalent for
+  - Callback URL `https://content.example.com/auth/callback/` plus a localhost equivalent for
     sandboxes. Logout URL `/`.
   - A `preSignUp` trigger (`amplify/auth/pre-sign-up/`) rejects any email that doesn't end in
-    `@entropy-forge.io`, for every trigger source including `PreSignUp_ExternalProvider`.
+    `@example.com`, for every trigger source including `PreSignUp_ExternalProvider`.
   - The Google OAuth consent screen is set to **Internal** (defense in depth).
   - Self-service sign-up is turned off (`allowAdminCreateUserOnly: true` through a CDK override), and
     the UI only calls `signInWithRedirect({ provider: 'Google' })`.
@@ -76,14 +76,14 @@ they're the first tasks of implementation.
   - Google's `hd` parameter can't reliably be passed through the Cognito Hosted UI, so the
     Internal consent screen plus the trigger replace it.
   - A trigger error makes Cognito redirect to the callback with `error_description`, which the
-    callback page maps to the "company accounts only" message.
+    callback page maps to the "authorized accounts only" message.
 - **Verify in spike**: that `allowAdminCreateUserOnly` doesn't block first-time federated
   sign-in. If it does, leave self-sign-up on. The pre-sign-up trigger still enforces the domain, and
   no password UI is exposed.
 - **Alternatives considered**:
   - Auth.js: needs a server, so it's rejected for static export.
-  - Cognito custom domain (`auth.entropy-forge.io`): needs another us-east-1 cert. The Cognito prefix
-    domain is fine for an internal tool.
+  - Cognito custom domain (`auth.example.com`): needs another us-east-1 cert. The Cognito prefix
+    domain is fine for a private tool.
 
 ## R4. Catalog data model on Amplify Data (AppSync + DynamoDB)
 
@@ -102,11 +102,11 @@ they're the first tasks of implementation.
 - **Verify in spike**:
   - That the secondary-index queries survive `disableOperations(['queries'])`. If they don't,
     disable only `mutations` and `subscriptions`, and record in the spec that drafts are visible
-    to signed-in employees through the API (they aren't secret).
+    to signed-in users through the API (they aren't secret).
   - That an enum field (`type`) works as an index partition key. If it doesn't, store `type` as
     `a.string()` validated against `CONTENT_TYPES` by ingest.
 - **Rationale**:
-  - Employees only read. All writes come from the owner's ingest or from the download Lambda, which
+  - Users only read. All writes come from the owner's ingest or from the download Lambda, which
     gives least privilege.
   - A sparse GSI avoids the "filter after limit" problem that would return short pages.
 - **Alternatives considered**:
@@ -131,7 +131,7 @@ they're the first tasks of implementation.
   - An admin Cognito group with GraphQL mutations: needs an interactive OAuth login from a CLI.
   - An ingest Lambda: violates "heavy processing on the owner's machine" (Principle I).
 
-## R6. Asset delivery: private bucket + CloudFront on `assets.entropy-forge.io`
+## R6. Asset delivery: private bucket + CloudFront on `assets.example.com`
 
 - **Decision** (production; other environments differ as described in R19):
   - A custom CDK construct `AssetsCdn` in `backend.createStack('assets')` owns:
@@ -148,7 +148,7 @@ they're the first tasks of implementation.
     - `/a/*` (archives): trusted key group, CachingDisabled, so archives are never cached at the edge.
     - `/_session*`: Lambda function URL origin with OAC, CachingDisabled. The origin request policy
       forwards `X-Id-Token` and `Origin`. A response headers policy sends CORS for
-      `https://content.entropy-forge.io` with credentials.
+      `https://content.example.com` with credentials.
   - Amplify `defineStorage` is **not** used.
 - **Rationale**:
   - The client never uses Amplify Storage APIs; every read goes through CloudFront.
@@ -164,12 +164,12 @@ they're the first tasks of implementation.
 ## R7. Asset session endpoint (signed cookies)
 
 - **Decision**:
-  - `GET https://assets.entropy-forge.io/_session` with header `X-Id-Token: <Cognito ID token>`,
+  - `GET https://assets.example.com/_session` with header `X-Id-Token: <Cognito ID token>`,
     called with `fetch(..., { credentials: 'include' })`.
   - The Lambda verifies the token with `aws-jwt-verify` (user pool, client ID, `token_use=id`) and
     checks the `email` domain. It then returns `204` with three `Set-Cookie` headers:
     `CloudFront-Policy`, `CloudFront-Signature`, `CloudFront-Key-Pair-Id`.
-  - Cookie attributes in production: `Domain=assets.entropy-forge.io; Path=/; Secure; HttpOnly;
+  - Cookie attributes in production: `Domain=assets.example.com; Path=/; Secure; HttpOnly;
     SameSite=Lax`, 12 h expiry. Personal environments use cross-site cookies instead (R19).
   - `GET /_session/signout` clears the cookies.
   - The function URL uses `AuthType AWS_IAM` behind **OAC**, so it can't be invoked directly.
@@ -202,7 +202,7 @@ they're the first tasks of implementation.
   - Separate keys mean a sandbox Lambda can never sign cookies or URLs that production accepts.
   - Both Lambdas read SSM at cold start and cache the values.
   - `@aws-sdk/cloudfront-signer`:
-    - `getSignedCookies` with a **custom policy**, resource `https://assets.entropy-forge.io/v/*`,
+    - `getSignedCookies` with a **custom policy**, resource `https://assets.example.com/v/*`,
       `DateLessThan` = now + 12 h;
     - `getSignedUrl` with a **canned policy**, single archive URL, expires now + 5 min (FR-018).
   - The download filename comes from `Content-Disposition: attachment; filename*=UTF-8''<name>`,
@@ -243,12 +243,12 @@ they're the first tasks of implementation.
   - Logging on the client followed by a cookie-authorized archive path: the client could skip the
     logging step.
 
-## R10. Certificate for `assets.entropy-forge.io` (us-east-1)
+## R10. Certificate for `assets.example.com` (us-east-1)
 
 - **Decision**:
   - A tiny standalone CDK app `infra/edge-cert/` (one stack, `env.region = 'us-east-1'`) creates an
-    ACM certificate for `assets.entropy-forge.io`, DNS-validated in the Route 53 zone for
-    `entropy-forge.io`.
+    ACM certificate for `assets.example.com`, DNS-validated in the Route 53 zone for
+    `example.com`.
   - It's deployed once (`npx cdk deploy` from that folder).
   - Its ARN is set as Amplify environment variable `ASSETS_CERT_ARN`. The hosted zone ID is set as
     `HOSTED_ZONE_ID`. `AssetsCdn` reads both at synth.
@@ -303,7 +303,7 @@ they're the first tasks of implementation.
 
 - **Decision**:
   - `next/image` with a custom loader maps the requested `width` to the nearest pre-generated size
-    (320/640/1280) under `https://assets.entropy-forge.io/v/<id>/…`. The component passes
+    (320/640/1280) under `https://assets.example.com/v/<id>/…`. The component passes
     `thumbKeys['320']` as `src`, and the loader swaps the `thumb-320` segment for the chosen width.
     This works because every generated file of one import shares one hash (R14).
   - Images that aren't catalog assets (the Google profile picture in the header) use
@@ -377,7 +377,7 @@ they're the first tasks of implementation.
 
 ## R17. Monthly cost estimate (Principle I)
 
-| Resource | Basis (internal, < 50 users, hundreds of items) | Est. $/month |
+| Resource | Basis (private, < 50 users, hundreds of items) | Est. $/month |
 |---|---|---|
 | Amplify Hosting (static) | A few builds/month, small transfer | ≤ $0.50 |
 | Cognito user pool | < 50 MAU, within free MAU | $0 |
@@ -403,10 +403,10 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
   default-src 'self';
   script-src 'self' 'unsafe-inline';
   style-src 'self' 'unsafe-inline';
-  img-src 'self' data: https://assets.entropy-forge.io https://*.googleusercontent.com;
-  media-src https://assets.entropy-forge.io;
+  img-src 'self' data: https://assets.example.com https://*.googleusercontent.com;
+  media-src https://assets.example.com;
   font-src 'self';
-  connect-src 'self' https://*.amazonaws.com https://*.amazoncognito.com https://assets.entropy-forge.io;
+  connect-src 'self' https://*.amazonaws.com https://*.amazoncognito.com https://assets.example.com;
   object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   ```
 
@@ -433,10 +433,10 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
 
   | Aspect | `master` (production) | Personal sandbox (`npx ampx sandbox`) |
   |---|---|---|
-  | App origin | `https://content.entropy-forge.io` (Amplify Hosting) | `http://localhost:3000` (`next dev`) |
-  | Asset domain | `assets.entropy-forge.io`: custom domain, us-east-1 cert, Route 53 alias | The distribution's own `*.cloudfront.net` domain. No cert, no DNS record |
-  | Asset cookies | `Domain=assets.entropy-forge.io; SameSite=Lax` (same-site) | Host-only (no `Domain`), `SameSite=None; Secure; HttpOnly` (cross-site) |
-  | `/_session` allowed origin | `https://content.entropy-forge.io` | `http://localhost:3000` |
+  | App origin | `https://content.example.com` (Amplify Hosting) | `http://localhost:3000` (`next dev`) |
+  | Asset domain | `assets.example.com`: custom domain, us-east-1 cert, Route 53 alias | The distribution's own `*.cloudfront.net` domain. No cert, no DNS record |
+  | Asset cookies | `Domain=assets.example.com; SameSite=Lax` (same-site) | Host-only (no `Domain`), `SameSite=None; Secure; HttpOnly` (cross-site) |
+  | `/_session` allowed origin | `https://content.example.com` | `http://localhost:3000` |
   | Signing keys | `/content-forge/master/...`, `keys/master.public-key.pem` | `/content-forge/sandbox-<user>/...`, `keys/sandbox-<user>.public-key.pem` |
   | AWS Budget | Yes (one per account covers all environments) | No |
   | CSP headers | Yes (R18) | None (`next dev`) |
@@ -456,6 +456,6 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
   (Safari, Firefox in strict mode) won't show sandbox previews or demos. Use Chrome for local
   development. Production isn't affected.
 - **Alternatives considered**:
-  - Per-sandbox subdomains (`<user>.assets.entropy-forge.io`): still cross-site from `localhost`,
+  - Per-sandbox subdomains (`<user>.assets.example.com`): still cross-site from `localhost`,
     plus a cert and DNS record for each.
   - One shared key pair: a sandbox function could then sign cookies production accepts.

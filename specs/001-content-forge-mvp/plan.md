@@ -7,18 +7,19 @@
 
 ## Summary
 
-Content Forge is an internal catalog where Entropy Forge employees browse, preview, and download the
-company's purchased templates and media.
+Content Forge is a private catalog where the owner (and any users they invite) browse, preview,
+and download the owner's personally purchased templates and media. `example.com` stands in for
+the owner's domain throughout.
 
 - **Front end**: a **Next.js 16 static export** (App Router, React Aria Components, Tailwind v4) on
-  **Amplify Hosting** at `content.entropy-forge.io`. Pages are static shells, and all data loads on
+  **Amplify Hosting** at `content.example.com`. Pages are static shells, and all data loads on
   the client.
 - **Backend (Amplify Gen 2, `us-west-2`)**:
-  - **Cognito** with Google federation, restricted to `@entropy-forge.io` by a pre-sign-up trigger;
+  - **Cognito** with Google federation, restricted to `@example.com` by a pre-sign-up trigger;
   - **Amplify Data** (AppSync + DynamoDB) for the read-only catalog, with a `getDownloadUrl` Lambda
     query;
   - a custom CDK **`AssetsCdn`** construct: a private S3 bucket behind CloudFront at
-    `assets.entropy-forge.io`.
+    `assets.example.com`.
 - **Asset access**: previews and live demos use signed cookies, which a session Lambda issues after
   verifying the Cognito token. Archives use 5-minute signed URLs.
 - **Ingest**: a local Node CLI bulk-imports the library. It generates every thumbnail and preview on
@@ -125,7 +126,7 @@ amplify/                                  # Amplify Gen 2 backend (CDK under the
 ├── backend.ts                            # defineBackend + AssetsCdn stack + addOutput(custom)
 ├── auth/
 │   ├── resource.ts                       # Google federation, callback/logout URLs
-│   └── pre-sign-up/{resource,handler}.ts # @entropy-forge.io domain gate
+│   └── pre-sign-up/{resource,handler}.ts # @example.com domain gate
 ├── data/resource.ts                      # Content model, indexes, getDownloadUrl query
 ├── functions/get-download-url/{resource,handler}.ts
 ├── custom/assets-cdn/
