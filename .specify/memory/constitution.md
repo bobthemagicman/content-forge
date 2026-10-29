@@ -1,25 +1,33 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.0.1 → 1.0.2
-Bump rationale: PATCH. The repository's primary branch was renamed from `main` to `master`. The
-Development Workflow branch rule now names `master`. No principle or rule changed meaning.
+Version change: 1.0.2 → 1.0.3
+Bump rationale: PATCH. Clarified that Content Forge is a personal project: the owner bought and
+personally owns every asset in the library. Audience wording updated to match. `example.com`
+is now a placeholder for the owner's domain, set per deployment. No principle or rule changed
+meaning: sign-in is still restricted to one Google Workspace domain.
 
-Modified principles: none
+Modified principles:
+  - I. Cost Discipline: "an internal tool" → "a personal project"
+  - II. Server-Enforced Access & Asset Isolation: audience and domain wording; rationale names the
+    owner
+  - IV. Accessible by Default: rationale wording
 Modified sections:
-  - Development Workflow & Quality Gates: "Nothing is committed directly to `main`" → `master`
+  - Technology & Platform Constraints: domains → `example.com` placeholder; branding renamed to
+    Content Forge identity
 
 Added sections: none
 Removed sections: none
 
 Dependent artifacts (read the constitution at runtime; not modified by this command):
   - .specify/templates/*: no change needed
-  - specs/001-content-forge-mvp/*: production environment and branch references updated to
-    `master` in the same change
+  - docs/requirements/content-forge-mvp.md, specs/001-content-forge-mvp/*, README.md: same wording
+    and domain changes in the same change
 
 Deferred TODOs: none
 
 History:
+  - 1.0.2 (2026-10-28): primary branch renamed from `main` to `master`.
   - 1.0.1 (2026-10-27): Principle V defines end-to-end tests for non-UI journeys (ingest CLI).
   - 1.0.0 (2026-10-27): first ratification; principles I–VI, Technology & Platform Constraints,
     Development Workflow & Quality Gates, Governance.
@@ -31,7 +39,7 @@ History:
 
 ### I. Cost Discipline (Near-Zero Spend)
 
-Content Forge is an internal tool with a budget of zero. Every design choice MUST favor
+Content Forge is a personal project with a budget of zero. Every design choice MUST favor
 pay-per-use services that stay within AWS always-free tiers at current usage.
 
 - MUST NOT provision always-on compute (EC2, ECS/Fargate services, provisioned databases), NAT
@@ -48,9 +56,9 @@ databases are the most common way a "free" AWS app ends up costing $30+/month.
 
 ### II. Server-Enforced Access & Asset Isolation (NON-NEGOTIABLE)
 
-The catalog holds licensed, paid material that only Entropy Forge employees may use.
+The catalog holds licensed, paid material that only the owner and the users they allow may use.
 
-- Only Google Workspace accounts in the `entropy-forge.io` domain may sign in. The domain check
+- Only Google Workspace accounts in the `example.com` domain may sign in. The domain check
   MUST be enforced in the backend (identity provider trigger and token verification), never
   only in UI code.
 - Every data read, preview, demo, and download MUST require valid authentication enforced by
@@ -67,7 +75,7 @@ The catalog holds licensed, paid material that only Entropy Forge employees may 
   purpose-built functions, with least-privilege IAM.
 - Archive extraction MUST reject path-traversal entries and enforce a size limit.
 
-**Rationale**: A leak of licensed assets is the highest-impact risk to the company, and running
+**Rationale**: A leak of licensed assets is the highest-impact risk to the owner, and running
 untrusted marketplace code in the browser is an obvious attack path.
 
 ### III. Static Front End, Serverless Backend, Everything as Code
@@ -97,8 +105,8 @@ zero. Infrastructure as code keeps the environment reproducible and reviewable.
   magenta `#B82471` on `#111`) are limited to large text and non-text accents.
 - Motion MUST respect `prefers-reduced-motion`. Every image MUST have meaningful alternative text.
 
-**Rationale**: The audience is the whole company, and accessibility retrofitted later costs far
-more than accessibility built in.
+**Rationale**: The app may be shared with other invited users, and accessibility retrofitted
+later costs far more than accessibility built in.
 
 ### V. Tested Increments
 
@@ -146,9 +154,9 @@ development is most reliable.
   assets, budgets). Region: `us-west-2`. CloudFront certificates live in `us-east-1`.
 - **Data**: DynamoDB for the catalog. Any future relational store (Aurora Serverless v2,
   MySQL-compatible) MUST be reached via the RDS Data API, without VPC-attached compute.
-- **Domains**: App at `content.entropy-forge.io`. Assets/demos at `assets.entropy-forge.io`.
-  DNS in Route 53.
-- **Branding**: Entropy Forge identity: dark theme (`#111` background), amber `#F2A524`
+- **Domains**: App at `content.example.com`. Assets/demos at `assets.example.com`.
+  DNS in Route 53. `example.com` is a placeholder for the owner's domain, set per deployment.
+- **Branding**: Content Forge identity: dark theme (`#111` background), amber `#F2A524`
   primary, magenta `#B82471` secondary, lime `#AFFC41` accent, Aeonik headings, Lato body.
 - **Browsers**: latest two versions of Chrome, Edge, Firefox, Safari. Desktop first, usable at
   tablet width.
@@ -183,4 +191,4 @@ development is most reliable.
   phase (e.g., usage tracking).
 - Use `AGENTS.md` for day-to-day development guidance.
 
-**Version**: 1.0.2 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-28
+**Version**: 1.0.3 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-28

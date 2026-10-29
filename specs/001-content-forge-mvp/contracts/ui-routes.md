@@ -1,4 +1,4 @@
-# Contract: UI Routes & States (`content.entropy-forge.io`)
+# Contract: UI Routes & States (`content.example.com`)
 
 **Provider**: `src/app/` (Next.js App Router, static export, `trailingSlash: true`)
 

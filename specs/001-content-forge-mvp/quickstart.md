@@ -13,7 +13,7 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 |---|---|
 | Node.js 24 LTS | `node -v` → `v24.x` |
 | AWS account, profile with admin rights for bootstrap | `aws sts get-caller-identity --profile <p>` |
-| Route 53 hosted zone `entropy-forge.io` | `aws route53 list-hosted-zones-by-name --dns-name entropy-forge.io` |
+| Route 53 hosted zone for your domain (`example.com` throughout these docs) | `aws route53 list-hosted-zones-by-name --dns-name example.com` |
 | Google Workspace admin access | Can create an **Internal** OAuth client in Google Cloud Console |
 | Ingest tools (owner machine) | `ffmpeg -version`, `soffice --version`, `pdftoppm -v`. Install the missing ones: `brew install --cask libreoffice` and `brew install poppler` |
 | Playwright browsers | `npx playwright install chromium firefox webkit` |
@@ -30,11 +30,11 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 3. **Google OAuth client**: Internal; authorized redirect URI
    `https://<cognito-domain>/oauth2/idpresponse` (the Cognito domain appears after the first
    deploy; update it then).
-4. **Amplify app**: connect the GitHub repo `entropy-forge/content-forge` in `us-west-2`. Set:
+4. **Amplify app**: connect the GitHub repo `bobthemagicman/content-forge` in `us-west-2`. Set:
    - secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`;
    - env vars `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget
      alert goes);
-   - the custom domain `content.entropy-forge.io` → branch `master`.
+   - the custom domain `content.example.com` → branch `master`.
 
    Confirm the platform/framework setting from research R2.
 
@@ -87,19 +87,19 @@ only.
 
 ## 6. End-to-end validation scenarios (deployed environment)
 
-Run against `https://content.entropy-forge.io` (or a sandbox URL) after step 4.
+Run against `https://content.example.com` (or a sandbox URL) after step 4.
 
 | # | Scenario | Steps | Expected | Proves |
 |---|---|---|---|---|
 | V1 | Landing hides content | Open `/` in a private window | Branding + "Sign in with Google". No thumbnails or item data in DOM or network | US1-1, FR-003 |
-| V2 | Company sign-in | Sign in with an `@entropy-forge.io` account | Arrive at `/browse/`. Header shows name/avatar | US1-2, FR-014 |
-| V3 | Personal account rejected | Sign in with a personal Gmail | Back on `/` with "company accounts only" | US1-3, FR-001/002, SC-002 |
-| V4 | Direct access denied | Signed out: `curl -I https://assets.entropy-forge.io/v/<id>/thumb-320.<hash>.webp`, replay an expired download URL, and POST a `listContentByTypeAndPublishedAt` query to the AppSync URL with no token | `403` for the assets, `401` from AppSync | US1-6, FR-005, SC-002 |
+| V2 | Allowed sign-in | Sign in with an `@example.com` account | Arrive at `/browse/`. Header shows name/avatar | US1-2, FR-014 |
+| V3 | Personal account rejected | Sign in with a personal Gmail | Back on `/` with "authorized accounts only" | US1-3, FR-001/002, SC-002 |
+| V4 | Direct access denied | Signed out: `curl -I https://assets.example.com/v/<id>/thumb-320.<hash>.webp`, replay an expired download URL, and POST a `listContentByTypeAndPublishedAt` query to the AppSync URL with no token | `403` for the assets, `401` from AppSync | US1-6, FR-005, SC-002 |
 | V5 | Rows | On `/browse/`, Tab into a row and use arrow keys and the next button | One row per non-empty type in the fixed order. Keyboard moves card to card | US2, FR-007–FR-011 |
 | V6 | Detail + download | Open a card, then Download. Repeat with the largest archive in the library (multi-GB) | Detail facts shown. Download starts within 1 s and saves with its original name. The large file completes and its checksum matches the original. `downloadCount` +1 each time | US3, FR-015–FR-020, SC-001, SC-005 |
 | V7 | Link expiry | Copy the signed URL from devtools and retry after 6 min | `403` | FR-018, SC-005 |
 | V8 | Live demo | On the template, select Live Demo | Template renders with CSS/JS/images in a new tab on `assets.` | US5, FR-026 |
-| V9 | Demo isolation | In the demo tab's console: `localStorage.length`, then `fetch('https://content.entropy-forge.io/')` | No app tokens visible. Cross-origin read is blocked | FR-027 |
+| V9 | Demo isolation | In the demo tab's console: `localStorage.length`, then `fetch('https://content.example.com/')` | No app tokens visible. Cross-origin read is blocked | FR-027 |
 | V10 | Previews | Open the PPT, video, and texture items | Slide gallery (≤12), playable ≤30 s clip, tiled texture | US6, FR-024 |
 | V11 | Re-import | Rerun step 4 without `--dry-run` | `skipped` for unchanged items. Same `id`s. No duplicates in rows | FR-037, SC-009 |
 | V12 | Sign-out | Header → Sign out, then reload `/browse/` and an asset URL | Redirect to `/`. Asset returns `403` | FR-006 |

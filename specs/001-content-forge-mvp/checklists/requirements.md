@@ -32,6 +32,6 @@
 ## Notes
 
 - Technology choices the owner approved during requirements gathering (Next.js static export, Amplify Gen 2, Cognito, DynamoDB) are confined to the "Constraints & Prior Decisions" subsection under Assumptions. They're labeled there as inputs to `/speckit-plan`, and requirements and success criteria stay technology-agnostic.
-- Google Workspace sign-in and the `entropy-forge.io` domain are business constraints the user sees, not implementation details.
+- Google Workspace sign-in and the `example.com` domain are product constraints the user sees, not implementation details.
 - All open questions from requirements gathering are resolved. Purchase-history import is explicitly deferred (Out of Scope).
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

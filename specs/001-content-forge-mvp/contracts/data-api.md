@@ -63,10 +63,10 @@ The browse page issues one call per `ContentType`, in parallel.
 
 | Step | Behavior |
 |---|---|
-| Identity | Email comes from the AppSync identity claims. A missing or non-`entropy-forge.io` email → `Unauthorized` |
+| Identity | Email comes from the AppSync identity claims. A missing or non-`example.com` email → `Unauthorized` |
 | Lookup | `Content` by `id`. Missing or not `PUBLISHED` → `NotFound` |
 | Logging | `DownloadEvents` put + `downloadCount ADD 1`, run concurrently. A failure is logged to CloudWatch and **doesn't fail the request** |
-| Response | `url` = CloudFront signed URL for `https://assets.entropy-forge.io/<archiveKey>` (canned policy). `expiresAt` = now + 300 s |
+| Response | `url` = CloudFront signed URL for `https://assets.example.com/<archiveKey>` (canned policy). `expiresAt` = now + 300 s |
 | Client action | `window.location.assign(url)`. The browser downloads with the `Content-Disposition` filename |
 
 **Errors** (GraphQL `errors[].errorType`):
@@ -85,7 +85,7 @@ container.
 
 | Key | Example | Consumers |
 |---|---|---|
-| `assetsBaseUrl` | `https://assets.entropy-forge.io` (sandboxes: `https://<id>.cloudfront.net`) | Web app (image loader, demo links, session) |
+| `assetsBaseUrl` | `https://assets.example.com` (sandboxes: `https://<id>.cloudfront.net`) | Web app (image loader, demo links, session) |
 | `assetsBucketName` | `content-forge-assets-master` | Ingest CLI |
 | `contentTableName` | `Content-<apiId>-NONE` | Ingest CLI |
 | `region` | `us-west-2` | Ingest CLI |
