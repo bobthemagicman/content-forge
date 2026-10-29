@@ -17,7 +17,8 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 | Google Workspace admin access | Can create an **Internal** OAuth client in Google Cloud Console |
 | Ingest tools (owner machine) | `ffmpeg -version`, `soffice --version`, `pdftoppm -v`. Install the missing ones: `brew install --cask libreoffice` and `brew install poppler` |
 | Playwright browsers | `npx playwright install chromium firefox webkit` |
-| Licensed Aeonik WOFF2 files and the logo SVG | Placed in `src/app/fonts/` and `public/brand/` |
+| Licensed Aeonik files (`Aeonik-Regular.woff2`, `.woff`) | Placed in `src/app/fonts/` on your machine. Git ignores them: the license doesn't allow publishing them in this public repo (see §2, step 5) |
+| Logo SVG | Placed in `public/brand/` |
 
 ## 2. One-time bootstrap (documented exceptions to "everything as code")
 
@@ -37,6 +38,11 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
    - the custom domain `content.example.com` → branch `master`.
 
    Confirm the platform/framework setting from research R2.
+5. **Licensed fonts**: upload `Aeonik-Regular.woff2` and `Aeonik-Regular.woff` to a private S3
+   prefix you control (for example `s3://<private-bucket>/content-forge/fonts/`; block public
+   access). Set the Amplify env var `FONTS_S3_URI` to that prefix and give the Amplify service
+   role `s3:GetObject` on it. The Amplify build copies them into `src/app/fonts/` (T026). Never
+   commit them.
 
 ## 3. Local development
 
