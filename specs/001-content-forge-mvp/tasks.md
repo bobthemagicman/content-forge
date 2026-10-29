@@ -337,7 +337,9 @@ that every story needs
   copied from the "Tailwind v4 mapping" in `design-system/content-forge/MASTER.md`:
   - colors (`bg`, `surface`, `raised`, text, lime `primary`, magenta `secondary` and
     `secondary-text`, amber `callout` and `focus`, `danger`);
-  - radius and shadow scales reset (square corners, no shadows);
+  - the radius scale (`sm` 6, `md` 12, `lg` 16, `xl` 18, `full`) and glow shadows, replacing
+    Tailwind's defaults;
+  - `--gradient-hot`, the page background glows, and the per-type `--accent-rgb` selectors;
   - font variables `--font-heading` and `--font-body`;
   - a base dark background and text color;
   - a global amber `:focus-visible` ring;
@@ -612,7 +614,11 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - `validate.ts`: enum, URL, date, and slug checks returning field errors.
 - [ ] T067 [P] [US4] Implement `tools/ingest/generate/image.ts` with `sharp`: write WebP thumbs at
   320/640/1280 and a 2048 preview, all named with the item's import hash, and return
-  `{ thumbKeys, previewKeys, meta: { width, height, format } }`. Used for `IMAGE` and `TEXTURE`.
+  `{ thumbKeys, previewKeys, accentColor, meta: { width, height, format } }`. `accentColor` is
+  `sharp(...).stats()`'s `dominant` color of the largest thumb, darkened to relative luminance
+  ≤ 0.2 and written as upper-case `#RRGGBB`, with a unit test for a white and a yellow input (see
+  [data-model.md](./data-model.md#entity-content)). Used for `IMAGE` and `TEXTURE`, and by every
+  other generator that makes its thumbs through `image.ts`.
 - [ ] T068 [P] [US4] Implement `tools/ingest/generate/video.ts`:
   - `ffprobe` JSON gives the duration, width, height, codec, and fps;
   - the poster comes from `ffmpeg -ss <10%> -frames:v 1` and is resized through `image.ts`;
@@ -752,8 +758,9 @@ catalog shows the empty state (quickstart V5).
   content block:
   - `next/image` with the custom loader, `src={thumbKeys['320']}` (the loader picks the width,
     T038), and a fixed 16:10 aspect box;
-  - title, plus a neutral type badge (`raised` fill, `#E5E5E5` text; see "Type badge" and
-    "Asset card" in `design-system/content-forge/MASTER.md`);
+  - title, plus a type badge (accent dot + muted label; see "Type badge" and "Asset card" in
+    `design-system/content-forge/MASTER.md`);
+  - a `data-type` attribute so the card picks up its type's `--accent-rgb` for the hover glow;
   - the type icon fallback;
   - `href` `/content/?slug=<slug>`.
 - [ ] T087 [US2] Implement `src/components/category-row.tsx`:
@@ -768,7 +775,8 @@ catalog shows the empty state (quickstart V5).
   exported, otherwise the `onLoadMore` API. Record the API used in
   `specs/001-content-forge-mvp/research.md` (R12).
 - [ ] T088 [US2] Replace the placeholder `src/app/(app)/browse/page.tsx` with the real page:
-  - an `h1` "Browse";
+  - the hero from `design-system/content-forge/pages/browse.md`: an `h1` "Browse", the lead line,
+    and the jump tiles (links to `#row-<routeSlug>`, hidden for empty types and below 768px);
   - one `useRow` per `CONTENT_TYPES` entry, all fetched in parallel;
   - three skeleton rows while loading;
   - rows with zero items are hidden, and "No content yet." shows when all are empty;
@@ -861,7 +869,9 @@ goes up by one. Unknown slugs show not-found (quickstart V6, V7).
   - states: loading skeleton, not-found (missing, no match, or `DRAFT`), and an error `Banner` with
     retry;
   - an `h1` title, a basic preview (the largest thumb through `next/image`, or the type icon),
-    `DetailFacts`, and `DetailActions`.
+    `DetailFacts`, and `DetailActions`;
+  - the item glow: `--item-glow` set from `accentColor`, falling back to the type accent (see
+    `design-system/content-forge/pages/detail.md`).
 
   Follow [contracts/ui-routes.md](./contracts/ui-routes.md#page-states).
 - [ ] T100 [US3] Create `tests/smoke/us3-download.smoke.ts`. Against the deployed environment:
