@@ -7,7 +7,7 @@ three stores:
 
 | Store | Owner | Purpose |
 |---|---|---|
-| `Content` (Amplify Data model → DynamoDB table + AppSync) | `amplify/data/resource.ts` | The catalog. Employees read it through the API. Ingest and the download function write it directly |
+| `Content` (Amplify Data model → DynamoDB table + AppSync) | `amplify/data/resource.ts` | The catalog. Users read it through the API. Ingest and the download function write it directly |
 | `DownloadEvents` (plain DynamoDB table) | `AssetsCdn` construct | Append-only download log. Not exposed through the API |
 | S3 bucket (`content-forge-assets-<env>`) | `AssetsCdn` construct | Original archives (`a/`) and viewable assets (`v/`) |
 
@@ -112,7 +112,7 @@ Values in row order, which is also the display order (FR-007):
 
 ---
 
-## Entity: Employee (User)
+## Entity: User
 
 Not stored by the app. Comes from the Cognito user pool, federated from Google.
 
