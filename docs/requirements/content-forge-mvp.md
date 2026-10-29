@@ -1,6 +1,6 @@
 # Requirements: Content Forge — MVP
 
-**Status**: Approved for planning (v4) · **Date**: 2026-10-27 · **Owner**: Justen L. Britain · **Repo**: `bobthemagicman/content-forge`
+**Status**: Approved for planning (v5) · **Date**: 2026-10-27 · **Owner**: Justen L. Britain · **Repo**: `bobthemagicman/content-forge`
 
 ## Revision History
 | Version | Change |
@@ -8,19 +8,20 @@
 | v1 | Initial draft (Next.js SSR on Lambda via OpenNext, Auth.js, CDK). |
 | v2 | Switched to a **static front-end** (Next.js `output: 'export'`) on **AWS Amplify Gen 2**. Auth moved to **Cognito + Google** because Auth.js needs a server. Next.js App Router confirmed (no React Router). DynamoDB only for the MVP; Aurora deferred. Domain `example.com`, region `us-west-2`. Thumbnails/previews are generated at ingest. Search is out of the MVP. Added branding. |
 | v3 | Resolved open questions: PowerPoints are stored only as the original zip plus slide previews. Subdomains confirmed, DNS in Route 53. Decks are `.ppt`/`.pptx` only. Purchase history is exportable, so ingest adds a purchase-history import. |
-| v4 | Cognito + Amplify Gen 2 approved. Aeonik licensed. Purchase-history import deferred to Should-have. No asset has been used on a client project yet. All MVP decisions resolved. |
+| v4 | Cognito + Amplify Gen 2 approved. Aeonik licensed. Purchase-history import deferred to Should-have. No asset has been used on a project yet. All MVP decisions resolved. |
+| v5 | Clarified as a personal project: the owner bought and personally owns every asset. Audience wording updated to match. `example.com` is a placeholder for the owner's domain, set per deployment. Sign-in is still limited to one Google Workspace domain. No design changes. |
 
 ## Summary
 
-Content Forge is an internal web catalog for Example Co's purchased digital assets: website templates, PowerPoint templates, video, images, textures, and other assets bought from marketplaces such as ThemeForest. Signed-in employees browse the catalog in a row-per-category layout (like a streaming service), open a detail page for any item, download it, and view a live demo for website templates. The front end is a static Next.js export hosted on AWS Amplify. Amplify Gen 2 backend resources (Cognito, AppSync/DynamoDB, S3, Lambda) live in TypeScript in the repo. There is no NAT Gateway and no always-on compute, and the target cost is near $0/month beyond S3 storage.
+Content Forge is a private web catalog for the owner's personally purchased digital assets: website templates, PowerPoint templates, video, images, textures, and other assets bought from marketplaces such as ThemeForest. Signed-in users browse the catalog in a row-per-category layout (like a streaming service), open a detail page for any item, download it, and view a live demo for website templates. The front end is a static Next.js export hosted on AWS Amplify. Amplify Gen 2 backend resources (Cognito, AppSync/DynamoDB, S3, Lambda) live in TypeScript in the repo. There is no NAT Gateway and no always-on compute, and the target cost is near $0/month beyond S3 storage.
 
 ---
 
-## Business Context
+## Background
 
-- **Problem**: The paid assets are scattered across marketplace accounts and local drives. Nobody can see what the company owns, so assets get bought twice or go unused, and there's no record of which client projects used which asset.
-- **Goal**: One internal place to find, preview, and download every licensed asset, and later to track where each one has been used.
-- **Audience**: The owner first, then all Example Co staff (software engineering consultants). They are technical users, and they'll often be hunting for a starting point for client work.
+- **Problem**: The paid assets are scattered across marketplace accounts and local drives. There's no single view of what the owner already has, so assets get bought twice or go unused, and there's no record of which projects used which asset.
+- **Goal**: One private place to find, preview, and download every licensed asset, and later to track where each one has been used.
+- **Audience**: The owner, who bought and personally owns every asset in the library. The design also allows a few invited users on the owner's Google Workspace domain. Users are technical, and they'll often be hunting for a starting point for a new project.
 - **Catalog size**: Hundreds of items today.
 - **Success criteria (MVP)**:
   1. A signed-in user can browse every item in the catalog, grouped by category.
@@ -38,8 +39,8 @@ Content Forge is an internal web catalog for Example Co's purchased digital asse
 |---|---|---|---|
 | Google Workspace SSO via Cognito | "See all" grid per content type | Favorites / recently viewed rows | Search & tag filtering |
 | Public landing page | Download count on detail page | Multiple demo variants per item | Admin UI (CLI only for MVP) |
-| Browse page with category rows | Vendor demo link fallback | Mobile layout polish | Roles/permissions beyond "employee" |
-| Content detail page | Video preview playback | | Usage tracking vs. client projects (phase 2, Aurora) |
+| Browse page with category rows | Vendor demo link fallback | Mobile layout polish | Roles/permissions beyond "user" |
+| Content detail page | Video preview playback | | Usage tracking vs. projects (phase 2, Aurora) |
 | Download (logged) | PowerPoint slide gallery | | Analytics dashboard |
 | Live demo for static website templates | | | |
 | Batch ingest CLI with preview generation | | | |
@@ -56,7 +57,7 @@ Content Forge is an internal web catalog for Example Co's purchased digital asse
 - [ ] The landing page has a "Sign in with Google" action. It calls Amplify `signInWithRedirect({ provider: 'Google' })`.
 - [ ] The Google Cloud OAuth client is set to **Internal** (Workspace-only) and passes `hd=example.com`.
 - [ ] A Cognito **Pre sign-up** Lambda trigger rejects any federated user whose verified email isn't `@example.com`. This is the authoritative check. The OAuth settings above are defense in depth.
-- [ ] Rejected users go back to `/` with a clear "company accounts only" message.
+- [ ] Rejected users go back to `/` with a clear "authorized accounts only" message.
 - [ ] App routes other than `/` and `/auth/callback` render only once a session exists. Otherwise they redirect to `/` on the client.
 - [ ] **All real protection is on the backend**: AppSync, Lambda, and CloudFront each require a valid Cognito token or signed cookie. Static HTML/JS bundles contain no catalog data.
 - [ ] Sign-out clears the Amplify session and the asset cookies (FR-6).
@@ -65,7 +66,7 @@ Content Forge is an internal web catalog for Example Co's purchased digital asse
 ### FR-2: Pre-Login Home Page (`/`)
 **Priority**: Must-have
 **Acceptance Criteria**:
-- [ ] Shows Example Co branding (see Branding), a one-line description of Content Forge, and the sign-in button.
+- [ ] Shows Content Forge branding (see Branding), a one-line description of Content Forge, and the sign-in button.
 - [ ] Shows **no** catalog content, thumbnails, or metadata.
 - [ ] A user who already has a session is redirected to `/browse`.
 - [ ] Sign-in errors (wrong domain, cancelled consent) appear here.
@@ -95,7 +96,7 @@ Content Forge is an internal web catalog for Example Co's purchased digital asse
 - [ ] Has a **Live Demo** button when the item has a hosted demo (FR-6). *(Should)* Otherwise shows "Vendor demo" when an `externalDemoUrl` is recorded.
 - [ ] An unknown or missing slug shows a not-found state with a link back to `/browse`.
 - [ ] *(Should)* Shows the download count.
-- [ ] *(Phase 2)* Lists the client projects that used the asset.
+- [ ] *(Phase 2)* Lists the projects that used the asset.
 
 ### FR-5: Download
 **Priority**: Must-have
@@ -173,7 +174,7 @@ Content Forge is an internal web catalog for Example Co's purchased digital asse
 - [ ] **Prerequisites are documented** and checked at startup: Node, ffmpeg/ffprobe, LibreOffice, Playwright Chromium, poppler (`pdftoppm`) or an equivalent.
 - [ ] The CLI uses the owner's AWS credentials (profile). Bucket/table names come from `amplify_outputs.json` custom outputs.
 
-### FR-10: Usage Tracking Against Client Projects
+### FR-10: Usage Tracking Against Projects
 **Priority**: Won't (MVP) — Phase 2
 - [ ] CRUD for clients and projects. Link content items to projects with notes and an optional live URL.
 - [ ] The detail page lists the projects that used the item. A report shows assets in use per license type.
@@ -212,7 +213,7 @@ Content Forge is an internal web catalog for Example Co's purchased digital asse
 - Each feature lands with tests (see Testing).
 
 ### NFR-5: Cost
-| Component | Expected cost at internal scale |
+| Component | Expected cost at personal scale |
 |---|---|
 | Amplify Hosting (static) | Cents/month (build minutes + small transfer) |
 | Cognito (Lite/Essentials, < 50 users) | $0 (within free MAU) |
@@ -232,14 +233,14 @@ Content Forge is an internal web catalog for Example Co's purchased digital asse
 ---
 
 ## User Stories
-- **US-1**: As a consultant, I want to sign in with my company Google account so that I don't need a separate password.
-- **US-2**: As a consultant, I want to see all our assets grouped by type so that I can quickly scan what we own.
-- **US-3**: As a consultant, I want to open an asset's details and previews so that I can judge whether it fits my client project.
-- **US-4**: As a consultant, I want to try a website template's live demo so that I can evaluate it without downloading it and running it locally.
-- **US-5**: As a consultant, I want to download an asset in one click so that I can start using it right away.
+- **US-1**: As a user, I want to sign in with my Google Workspace account so that I don't need a separate password.
+- **US-2**: As a user, I want to see all the assets grouped by type so that I can quickly scan what's in the library.
+- **US-3**: As a user, I want to open an asset's details and previews so that I can judge whether it fits my project.
+- **US-4**: As a user, I want to try a website template's live demo so that I can evaluate it without downloading it and running it locally.
+- **US-5**: As a user, I want to download an asset in one click so that I can start using it right away.
 - **US-6**: As the owner, I want to ingest my whole existing library in one batch run, with previews generated for me, so that the catalog is useful from day one.
-- **US-7** *(phase 2)*: As the owner, I want to see which client projects used an asset so that I can stay license-compliant and show examples.
-- **US-8**: As a non-employee, I must be unable to view or download any asset.
+- **US-7** *(phase 2)*: As the owner, I want to see which projects used an asset so that I can stay license-compliant and show examples.
+- **US-8**: As someone without an allowed account, I must be unable to view or download any asset.
 
 ---
 
@@ -358,7 +359,7 @@ tools/ingest/                 batch ingest CLI
 ---
 
 ## Branding
-Taken from https://example.com (logo and final assets to be supplied by the owner):
+Supplied by the owner (the logo and final assets are still to come):
 
 | Token | Value | Use |
 |---|---|---|
@@ -407,7 +408,7 @@ Voice: direct, practical, no fluff, matching the site's tagline "We fix the syst
 ## Risks
 | Risk | Impact | Mitigation |
 |---|---|---|
-| **Marketplace license terms** (e.g., Envato Regular vs. Extended) may not allow company-wide reuse | High | No asset has been used on a client project yet, so phase-2 usage tracking starts clean with no backfill. Record license type per item and show it on the detail page. Review terms before company-wide rollout. |
+| **Marketplace license terms** (e.g., Envato Regular vs. Extended) may not allow sharing with other users | High | No asset has been used on a project yet, so phase-2 usage tracking starts clean with no backfill. Record license type per item and show it on the detail page. Review terms before giving anyone else access. |
 | Third-party template JS runs in users' browsers | High | Separate `assets.` origin, no shared cookies, tokens only in app-origin storage, signed-cookie scope limited to `/v/*`. |
 | Ingest heuristics guess wrong (nested zips, wrong demo entry, wrong deck) across hundreds of items | Medium | `--dry-run`, per-item overrides, ingest report, idempotent re-runs. |
 | LibreOffice renders PowerPoint slides imperfectly (missing fonts) | Medium | Install fonts bundled in the template before converting. Accept preview-grade fidelity. Allow manual preview override. |

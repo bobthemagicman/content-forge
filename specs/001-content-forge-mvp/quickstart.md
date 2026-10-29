@@ -13,7 +13,7 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 |---|---|
 | Node.js 24 LTS | `node -v` → `v24.x` |
 | AWS account, profile with admin rights for bootstrap | `aws sts get-caller-identity --profile <p>` |
-| Route 53 hosted zone `example.com` | `aws route53 list-hosted-zones-by-name --dns-name example.com` |
+| Route 53 hosted zone for your domain (`example.com` throughout these docs) | `aws route53 list-hosted-zones-by-name --dns-name example.com` |
 | Google Workspace admin access | Can create an **Internal** OAuth client in Google Cloud Console |
 | Ingest tools (owner machine) | `ffmpeg -version`, `soffice --version`, `pdftoppm -v`. Install the missing ones: `brew install --cask libreoffice` and `brew install poppler` |
 | Playwright browsers | `npx playwright install chromium firefox webkit` |
@@ -92,8 +92,8 @@ Run against `https://content.example.com` (or a sandbox URL) after step 4.
 | # | Scenario | Steps | Expected | Proves |
 |---|---|---|---|---|
 | V1 | Landing hides content | Open `/` in a private window | Branding + "Sign in with Google". No thumbnails or item data in DOM or network | US1-1, FR-003 |
-| V2 | Company sign-in | Sign in with an `@example.com` account | Arrive at `/browse/`. Header shows name/avatar | US1-2, FR-014 |
-| V3 | Personal account rejected | Sign in with a personal Gmail | Back on `/` with "company accounts only" | US1-3, FR-001/002, SC-002 |
+| V2 | Allowed sign-in | Sign in with an `@example.com` account | Arrive at `/browse/`. Header shows name/avatar | US1-2, FR-014 |
+| V3 | Personal account rejected | Sign in with a personal Gmail | Back on `/` with "authorized accounts only" | US1-3, FR-001/002, SC-002 |
 | V4 | Direct access denied | Signed out: `curl -I https://assets.example.com/v/<id>/thumb-320.<hash>.webp`, replay an expired download URL, and POST a `listContentByTypeAndPublishedAt` query to the AppSync URL with no token | `403` for the assets, `401` from AppSync | US1-6, FR-005, SC-002 |
 | V5 | Rows | On `/browse/`, Tab into a row and use arrow keys and the next button | One row per non-empty type in the fixed order. Keyboard moves card to card | US2, FR-007–FR-011 |
 | V6 | Detail + download | Open a card, then Download. Repeat with the largest archive in the library (multi-GB) | Detail facts shown. Download starts within 1 s and saves with its original name. The large file completes and its checksum matches the original. `downloadCount` +1 each time | US3, FR-015–FR-020, SC-001, SC-005 |
