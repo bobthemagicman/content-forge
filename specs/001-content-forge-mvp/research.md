@@ -76,14 +76,14 @@ they're the first tasks of implementation.
   - Google's `hd` parameter can't reliably be passed through the Cognito Hosted UI, so the
     Internal consent screen plus the trigger replace it.
   - A trigger error makes Cognito redirect to the callback with `error_description`, which the
-    callback page maps to the "company accounts only" message.
+    callback page maps to the "authorized accounts only" message.
 - **Verify in spike**: that `allowAdminCreateUserOnly` doesn't block first-time federated
   sign-in. If it does, leave self-sign-up on. The pre-sign-up trigger still enforces the domain, and
   no password UI is exposed.
 - **Alternatives considered**:
   - Auth.js: needs a server, so it's rejected for static export.
   - Cognito custom domain (`auth.example.com`): needs another us-east-1 cert. The Cognito prefix
-    domain is fine for an internal tool.
+    domain is fine for a private tool.
 
 ## R4. Catalog data model on Amplify Data (AppSync + DynamoDB)
 
@@ -102,11 +102,11 @@ they're the first tasks of implementation.
 - **Verify in spike**:
   - That the secondary-index queries survive `disableOperations(['queries'])`. If they don't,
     disable only `mutations` and `subscriptions`, and record in the spec that drafts are visible
-    to signed-in employees through the API (they aren't secret).
+    to signed-in users through the API (they aren't secret).
   - That an enum field (`type`) works as an index partition key. If it doesn't, store `type` as
     `a.string()` validated against `CONTENT_TYPES` by ingest.
 - **Rationale**:
-  - Employees only read. All writes come from the owner's ingest or from the download Lambda, which
+  - Users only read. All writes come from the owner's ingest or from the download Lambda, which
     gives least privilege.
   - A sparse GSI avoids the "filter after limit" problem that would return short pages.
 - **Alternatives considered**:
@@ -377,7 +377,7 @@ they're the first tasks of implementation.
 
 ## R17. Monthly cost estimate (Principle I)
 
-| Resource | Basis (internal, < 50 users, hundreds of items) | Est. $/month |
+| Resource | Basis (private, < 50 users, hundreds of items) | Est. $/month |
 |---|---|---|
 | Amplify Hosting (static) | A few builds/month, small transfer | ≤ $0.50 |
 | Cognito user pool | < 50 MAU, within free MAU | $0 |
