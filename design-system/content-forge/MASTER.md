@@ -341,7 +341,8 @@ the MVP (search and filtering are out of scope), so no hover state.
 Left: logo mark (rounded square in the gradient) and wordmark, linking to `/browse/`. Then the
 type nav as pills: rest `#E5E5E5`, hover `glass-hover` fill, current = `primary-tint` pill with lime
 text and `aria-current="page"`. Right: user menu (`MenuTrigger`: initials in a gradient ring →
-"Signed in as …", "Sign out"). Below 768px the type nav moves into a menu button.
+"Signed in as …", "Sign out"). Below 1024px the type nav moves into a menu button (the seven
+pills don't fit on one line at tablet widths).
 
 ### Jump tiles (Browse, FR-010)
 

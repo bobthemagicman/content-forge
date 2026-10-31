@@ -52,6 +52,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     - `test:ingest-e2e` (`vitest run -c vitest.ingest-e2e.config.ts`);
     - `ingest` (`tsx tools/ingest/cli.ts`);
   - create `.nvmrc` containing `24`.
+  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root only, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. Still to do: `test:e2e`, `test:smoke`, `test:infra`, `test:ingest-e2e`, `ingest`, and the `amplify`/`infra` typecheck projects.
 - [ ] T002 Install dependencies, updating `package.json` and `package-lock.json`:
   - **runtime**: `aws-amplify`, `react-aria-components`;
   - **backend dev**: `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`,
@@ -65,14 +66,15 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
 
   Run `npx playwright install chromium firefox webkit`. Every dependency here is justified in
   plan.md Complexity Tracking (Principle VI).
-- [ ] T003 [P] Rewrite `next.config.ts` per research R1:
+  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Still to do: `aws-amplify`, the backend and ingest packages, the remaining test packages, and the Playwright browsers.
+- [x] T003 [P] Rewrite `next.config.ts` per research R1:
   - add `output: 'export'`, `trailingSlash: true`,
     `images: { loader: 'custom', loaderFile: './src/lib/assets/image-loader.ts' }`;
   - **remove** `cacheComponents` and `partialPrefetching`;
   - keep `reactCompiler: true` and the existing `turbopack.rules` for `@tailwindcss/turbopack`.
 
   Read `node_modules/next/dist/docs/01-app/02-guides/static-exports.md` first.
-- [ ] T004 [P] Update `tsconfig.json`:
+- [x] T004 [P] Update `tsconfig.json`:
   - confirm `strict: true`;
   - add `"@/*": ["./src/*"]` if missing;
   - set `include` to cover `src`, `tools`, `tests`, `*.config.ts`;
@@ -94,6 +96,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
   - `vitest.infra.config.ts`: node environment, include `tests/infra/**`;
   - `vitest.ingest-e2e.config.ts`: node environment, include `tests/e2e-ingest/**`, `testTimeout`
     300 s, no file parallelism.
+  - **Progress (beta preview):** `vitest.config.ts` and `tests/setup/vitest.setup.ts` exist. Still to do: the `$amplify` alias, `vitest.infra.config.ts`, and `vitest.ingest-e2e.config.ts`.
 - [ ] T007 [P] Create `playwright.config.ts`:
   - project `e2e`: `testDir: tests/e2e`, Chromium. The config's `webServer` runs
     `node scripts/serve-out.mjs` on port 4173;
@@ -104,7 +107,8 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
 
   Also create `scripts/serve-out.mjs`, a `node:http` static server for `out/` that resolves
   `dir/` → `dir/index.html` and falls back to `404.html` with status 404.
-- [ ] T008 [P] Update `eslint.config.mjs` to ignore `out/`, `.amplify/`, `**/cdk.out/`,
+  - **Progress (beta preview):** `scripts/serve-out.mjs` exists (also `npm start`). Still to do: `playwright.config.ts`.
+- [x] T008 [P] Update `eslint.config.mjs` to ignore `out/`, `.amplify/`, `**/cdk.out/`,
   `amplify_outputs*.json`, `playwright-report/`, `test-results/`, and to set `react/no-danger` to
   `error` (the CSP allows inline scripts, research R18).
 - [ ] T009 [P] Create `.github/workflows/ci.yml`:
@@ -114,6 +118,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     `npm test` → `npm run build` → `npx playwright install --with-deps chromium firefox webkit` →
     `npm run test:e2e` → `npm run test:infra`;
   - upload the Playwright report on failure.
+  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. Still to do: `use-e2e-outputs`, the Playwright E2E run, `test:infra`, and the report upload.
 
 ---
 
@@ -146,7 +151,7 @@ that every story needs
      committed;
   4. deletes every temporary private-key file. Use `trap` cleanup and never write under the repo
      (research R8).
-- [ ] T013 [P] Create `src/lib/content-types.ts`. It exports the `CONTENT_TYPES` ordered array:
+- [x] T013 [P] Create `src/lib/content-types.ts`. It exports the `CONTENT_TYPES` ordered array:
   `WEBSITE_TEMPLATE`, `POWERPOINT_TEMPLATE`, `VIDEO`, `IMAGE`, `TEXTURE`, `OTHER`. Each entry has:
   - `label` (e.g., "Website Templates");
   - `routeSlug` (`website-templates`, `powerpoint-templates`, `video`, `images`, `textures`,
@@ -333,7 +338,7 @@ that every story needs
 
 ### Front-end foundation
 
-- [ ] T028 [P] Define brand design tokens in `src/app/globals.css` with a Tailwind v4 `@theme`,
+- [x] T028 [P] Define brand design tokens in `src/app/globals.css` with a Tailwind v4 `@theme`,
   copied from the "Tailwind v4 mapping" in `design-system/content-forge/MASTER.md`:
   - colors (`bg`, `surface`, `raised`, text, lime `primary`, magenta `secondary` and
     `secondary-text`, amber `callout` and `focus`, `danger`);
@@ -344,7 +349,7 @@ that every story needs
   - a base dark background and text color;
   - a global amber `:focus-visible` ring;
   - a `@media (prefers-reduced-motion: reduce)` reset for `scroll-behavior` and transitions.
-- [ ] T029 [P] (owner files) Create `src/app/fonts.ts`:
+- [x] T029 [P] (owner files) Create `src/app/fonts.ts`:
   - **Aeonik**: `next/font/local` pointing at `src/app/fonts/Aeonik-Regular.woff2` (and `.woff`),
     supplied by the owner (Regular weight only; set `font-synthesis: none`), as `--font-heading`;
   - **Lato** (300/400/700): `next/font/google`, as `--font-body`.
@@ -361,7 +366,7 @@ that every story needs
   `outputs.custom.assetsBaseUrl`.
 - [ ] T031 [P] Create `src/lib/data/client.ts`. It exports a lazily created
   `generateClient<Schema>({ authMode: 'userPool' })`, typed from `amplify/data/resource.ts`.
-- [ ] T032 [P] Create styled React Aria wrappers in `src/components/ui/`:
+- [x] T032 [P] Create styled React Aria wrappers in `src/components/ui/`:
   - `button.tsx`, `link.tsx`, `skeleton.tsx`;
   - `banner.tsx`: an inline error with a Retry action;
   - `toast.tsx`: a React Aria toast region plus a `useToast()` helper. Check which Toast exports
@@ -374,7 +379,8 @@ that every story needs
 - [ ] T033 Create `src/app/providers.tsx` (`'use client'`). It calls `configureAmplify()` once and
   wraps children in React Aria `RouterProvider` (`navigate={router.push}` from `next/navigation`
   `useRouter`) and the toast region.
-- [ ] T034 Update `src/app/layout.tsx`:
+  - **Progress (beta preview):** `RouterProvider`, the toast region, and the session provider are wired. Still to do: `configureAmplify()` (T030).
+- [x] T034 Update `src/app/layout.tsx`:
   - `<html lang="en">` with the font variables from `src/app/fonts.ts`;
   - `<body>` wrapped in `Providers`;
   - `metadata` title "Content Forge" and `robots: { index: false }`.
@@ -385,6 +391,7 @@ that every story needs
   - when signed out, it calls `router.replace('/')`;
   - `signOut()` calls `GET <assetsBaseUrl>/_session/signout` (`credentials: 'include'`), then
     Amplify `signOut()`, then navigates to `/`.
+  - **Progress (beta preview):** `src/lib/auth/session.tsx` provides `useSession()` with `status`, `user`, `signIn()`, and `signOut()`, simulated with localStorage for the beta preview. Still to do: the Cognito/Amplify implementation behind the same API, and the `/_session/signout` call.
 - [ ] T036 Create `src/lib/assets/asset-session.tsx`. `AssetSessionProvider`:
   - calls `GET <assetsBaseUrl>/_session` with header `X-Id-Token` and `credentials: 'include'`;
   - renders a full-page skeleton until it gets `204`;
@@ -399,7 +406,7 @@ that every story needs
   - a refresh happens when expiry is under 60 min;
   - `reportAssetError()` retries exactly once and then sets `needsSignIn`;
   - a `401` from `/_session` triggers sign-out.
-- [ ] T038 [P] Create `src/lib/assets/image-loader.ts` and `src/lib/assets/asset-url.ts`:
+- [x] T038 [P] Create `src/lib/assets/image-loader.ts` and `src/lib/assets/asset-url.ts`:
   - `assetUrl(key)` returns `<assetsBaseUrl>/<key>`;
   - the default-export `next/image` loader takes `src` as a real thumb key,
     `v/<id>/thumb-320.<hash>.webp` (`thumbKeys['320']`). It replaces the `thumb-(320|640|1280)`
@@ -408,12 +415,13 @@ that every story needs
 
   Ingest uses one hash per import for all of an item's generated files, so keys differ only by
   width (research R13, R14).
-- [ ] T039 [P] Write unit tests in `tests/unit/assets/image-loader.test.ts` covering width
+- [x] T039 [P] Write unit tests in `tests/unit/assets/image-loader.test.ts` covering width
   rounding (100→320, 321→640, 2000→1280), swapping the width segment in a real `thumb-320` key, and
   the base-URL prefix.
 - [ ] T040 Create `src/app/(app)/layout.tsx` (`'use client'`). It composes `AuthProvider` →
   `AssetSessionProvider` → `<main>{children}</main>`, and renders nothing from the catalog until
   both are ready (contracts/ui-routes.md "Global behavior").
+  - **Progress (beta preview):** The layout gates on the session, sends signed-out visitors to `/`, and renders the header and `<main>`. Still to do: `AssetSessionProvider` (T036).
 
 ### Test harnesses
 
@@ -479,6 +487,7 @@ without a session are denied (quickstart V1–V4, V12).
   - the error banner reads `?error=` through `useSearchParams` inside `<Suspense>`;
   - an existing session triggers `router.replace('/browse/')`;
   - no catalog data is fetched (FR-002–FR-004).
+  - **Progress (beta preview):** Layout, Google-branded button, `?error=` banner inside `<Suspense>`, and the signed-in redirect are in. Still to do: the owner's logo file (a placeholder mark is used) and `signInWithRedirect` in place of the simulated sign-in.
 - [ ] T048 [P] [US1] Implement `src/app/auth/callback/page.tsx` (client):
   - listen to the Amplify `Hub` `auth` channel (`signInWithRedirect`,
     `signInWithRedirect_failure`) and parse `error_description` from the URL;
@@ -491,10 +500,11 @@ without a session are denied (quickstart V1–V4, V12).
   button calling `useSession().signOut()` (FR-006, FR-014). Render the avatar with `next/image`
   and `unoptimized`, because it's a Google URL and the catalog image loader only handles asset keys
   (research R13). The CSP allows `*.googleusercontent.com` (R18).
-- [ ] T050 [US1] Add `AppHeader` above `<main>` in `src/app/(app)/layout.tsx`.
-- [ ] T051 [P] [US1] Create a placeholder signed-in home in `src/app/(app)/browse/page.tsx` (`h1`
+  - **Progress (beta preview):** Wordmark, type nav, and the user menu (name, email, initials, Sign out) are in. Still to do: the Google profile picture avatar, once real user attributes exist.
+- [x] T050 [US1] Add `AppHeader` above `<main>` in `src/app/(app)/layout.tsx`.
+- [x] T051 [P] [US1] Create a placeholder signed-in home in `src/app/(app)/browse/page.tsx` (`h1`
   "Browse"). It gives the redirect a target, and US2 (T088) replaces it.
-- [ ] T052 [P] [US1] Implement the branded not-found page in `src/app/not-found.tsx`, which is
+- [x] T052 [P] [US1] Implement the branded not-found page in `src/app/not-found.tsx`, which is
   exported as `404.html`, with a link to `/`.
 - [ ] T053 [P] [US1] Create the deployed smoke tests:
   - `tests/smoke/auth.setup.ts`: a headed manual Google login that saves storage state to
@@ -752,9 +762,10 @@ catalog shows the empty state (quickstart V5).
   It calls `client.models.Content.listContentByTypeAndPublishedAt({ type, sortDirection: 'DESC',
   limit, nextToken }, { selectionSet: ['id','slug','title','type','thumbKeys'] })` and returns
   `{ items, nextToken }` ([contracts/data-api.md](./contracts/data-api.md#1-list-a-browse-row)).
-- [ ] T085 [US2] Implement `useRow(type)` in `src/lib/data/use-row.ts`, holding
+  - **Progress (beta preview):** `listRow` exists with the contract's signature and is served by the demo catalog (`src/lib/data/demo/`). Still to do: the AppSync query.
+- [x] T085 [US2] Implement `useRow(type)` in `src/lib/data/use-row.ts`, holding
   `{ items, status: 'loading'|'ready'|'error', hasMore, loadMore(), retry() }`. It depends on T084.
-- [ ] T086 [P] [US2] Implement `src/components/content-card.tsx` as a React Aria `GridListItem`
+- [x] T086 [P] [US2] Implement `src/components/content-card.tsx` as a React Aria `GridListItem`
   content block:
   - `next/image` with the custom loader, `src={thumbKeys['320']}` (the loader picks the width,
     T038), and a fixed 16:10 aspect box;
@@ -763,7 +774,7 @@ catalog shows the empty state (quickstart V5).
   - a `data-type` attribute so the card picks up its type's `--accent-rgb` for the hover glow;
   - the type icon fallback;
   - `href` `/content/?slug=<slug>`.
-- [ ] T087 [US2] Implement `src/components/category-row.tsx`:
+- [x] T087 [US2] Implement `src/components/category-row.tsx`:
   - an `h2` row title with `id="row-<routeSlug>"`;
   - a React Aria `GridList` with `orientation="horizontal"` and `aria-label=<label>`, whose items
     render `ContentCard`;
@@ -774,14 +785,14 @@ catalog shows the empty state (quickstart V5).
   **Verify R12** against the installed `react-aria-components`: use `GridListLoadMoreItem` if it's
   exported, otherwise the `onLoadMore` API. Record the API used in
   `specs/001-content-forge-mvp/research.md` (R12).
-- [ ] T088 [US2] Replace the placeholder `src/app/(app)/browse/page.tsx` with the real page:
+- [x] T088 [US2] Replace the placeholder `src/app/(app)/browse/page.tsx` with the real page:
   - the hero from `design-system/content-forge/pages/browse.md`: an `h1` "Browse", the lead line,
     and the jump tiles (links to `#row-<routeSlug>`, hidden for empty types and below 768px);
   - one `useRow` per `CONTENT_TYPES` entry, all fetched in parallel;
   - three skeleton rows while loading;
   - rows with zero items are hidden, and "No content yet." shows when all are empty;
   - a per-row `Banner` with Retry on error (FR-007–FR-012).
-- [ ] T089 [US2] Add type navigation to `src/components/app-header.tsx`: a React Aria `Link` list of
+- [x] T089 [US2] Add type navigation to `src/components/app-header.tsx`: a React Aria `Link` list of
   the type labels that scrolls to and focuses `#row-<routeSlug>` on `/browse/`, or navigates to
   `/browse/#row-<routeSlug>` from other pages (FR-010).
 
@@ -854,15 +865,16 @@ goes up by one. Unknown slugs show not-found (quickstart V6, V7).
   - `getBySlug` uses `listContentBySlug` and returns the first item, or `null` when it's missing
     or not `PUBLISHED`. If there's more than one match, it logs a warning;
   - `requestDownloadUrl` maps GraphQL `errors[].errorType` to a typed error.
-- [ ] T097 [P] [US3] Implement `src/components/detail/detail-facts.tsx`: type label, description,
+  - **Progress (beta preview):** `getBySlug` and `requestDownloadUrl` exist, backed by the demo catalog (downloads return the `BetaPreview` error). Still to do: AppSync and the `errorType` mapping.
+- [x] T097 [P] [US3] Implement `src/components/detail/detail-facts.tsx`: type label, description,
   tags, source marketplace link (`rel="noopener noreferrer"`), license label, original file name,
   formatted size, and the type-specific `meta` facts (FR-015).
-- [ ] T098 [P] [US3] Implement `src/components/detail/detail-actions.tsx`: a React Aria `Button`
+- [x] T098 [P] [US3] Implement `src/components/detail/detail-actions.tsx`: a React Aria `Button`
   "Download" that calls `requestDownloadUrl`, shows a pending state, then
   `window.location.assign(url)`. Errors map to toasts using the messages in
   [contracts/data-api.md](./contracts/data-api.md#3-get-a-download-url). Leave an
   `extraActions` slot for US5.
-- [ ] T099 [US3] Implement `src/app/(app)/content/page.tsx`:
+- [x] T099 [US3] Implement `src/app/(app)/content/page.tsx`:
   - a client component that reads `slug` with `useSearchParams` inside `<Suspense>` (skeleton
     fallback);
   - loads with `getBySlug`;
@@ -913,10 +925,10 @@ working. The demo URL is denied without a session, and demo code can't see app t
   - open a demo, then assert the page loads with no failed CSS or JS requests;
   - assert `localStorage.length === 0` on the demo origin;
   - assert a context with no cookies gets `403` for the same URL.
-- [ ] T104 [US5] Add `demoUrl(item)` to `src/lib/assets/asset-url.ts`. It builds
+- [x] T104 [US5] Add `demoUrl(item)` to `src/lib/assets/asset-url.ts`. It builds
   `<assetsBaseUrl>/v/<id>/demo/<demoEntryPath>`, encodes each path segment, and refuses paths with
   `..` (FR-034).
-- [ ] T105 [US5] Add **Live Demo** and **Vendor demo** to `src/components/detail/detail-actions.tsx`
+- [x] T105 [US5] Add **Live Demo** and **Vendor demo** to `src/components/detail/detail-actions.tsx`
   following the action rules. Live Demo calls `window.open(demoUrl(item), '_blank', 'noopener')`.
   Vendor demo is an external React Aria `Link` with `target="_blank"` and
   `rel="noopener noreferrer"` (FR-026–FR-028).
@@ -949,25 +961,26 @@ every image has alt text (quickstart V10).
 
 ### Implementation for User Story 6
 
-- [ ] T108 [P] [US6] Implement `src/components/previews/screenshot-gallery.tsx`, with desktop and
+- [x] T108 [P] [US6] Implement `src/components/previews/screenshot-gallery.tsx`, with desktop and
   mobile screenshots from `previewKeys` as `next/image`, and labeled tabs ("Desktop" / "Mobile")
   using React Aria `Tabs`.
-- [ ] T109 [P] [US6] Implement `src/components/previews/slide-gallery.tsx`, a responsive grid of up
+- [x] T109 [P] [US6] Implement `src/components/previews/slide-gallery.tsx`, a responsive grid of up
   to 12 slide images showing "Slide n of slideCount", where activating a slide opens it larger in
   the `image-zoom` modal.
 - [ ] T110 [P] [US6] Implement `src/components/previews/video-preview.tsx`:
   `<video controls preload="metadata" playsInline poster={assetUrl(posterKey)} src={assetUrl(videoPreviewKey)}>`
   plus a caption with the duration and a note that it's a ≤30 s preview. `onError` calls
   `reportAssetError()`.
-- [ ] T111 [P] [US6] Implement `src/components/previews/image-zoom.tsx`, which shows the 2048 preview
+  - **Progress (beta preview):** The video preview is in. Still to do: `onError` → `reportAssetError()` (T036).
+- [x] T111 [P] [US6] Implement `src/components/previews/image-zoom.tsx`, which shows the 2048 preview
   and opens it in a React Aria `Modal`/`Dialog` with an accessible close button. Panning uses
   `overflow: auto`, with no custom gestures.
-- [ ] T112 [P] [US6] Implement `src/components/previews/texture-tile.tsx`, which shows three panels
+- [x] T112 [P] [US6] Implement `src/components/previews/texture-tile.tsx`, which shows three panels
   with `background-image: url(<asset>)`, `background-repeat: repeat`, and `background-size` at
   25%/50%/100%. Each panel has an `aria-label` describing its scale.
-- [ ] T113 [P] [US6] Implement `src/components/previews/file-list.tsx`, a table of `meta.fileList`
+- [x] T113 [P] [US6] Implement `src/components/previews/file-list.tsx`, a table of `meta.fileList`
   with path and formatted size, plus "+N more" when the list was truncated at 500.
-- [ ] T114 [US6] Implement `src/components/previews/index.tsx` (`PreviewForType`) mapping each
+- [x] T114 [US6] Implement `src/components/previews/index.tsx` (`PreviewForType`) mapping each
   `ContentType` to its preview, and replace the basic preview in `src/app/(app)/content/page.tsx`
   with it (FR-024, FR-025).
 
@@ -993,17 +1006,17 @@ download increases the item's displayed count by one.
 
 ### Implementation for User Story 7
 
-- [ ] T116 [US7] Implement `src/app/(app)/browse/[type]/page.tsx`:
+- [x] T116 [US7] Implement `src/app/(app)/browse/[type]/page.tsx`:
   - `generateStaticParams()` returns every `CONTENT_TYPES[].routeSlug`, and `dynamicParams = false`;
   - a client grid built on React Aria `GridList` (`layout="grid"`) using `useRow(type)` with
     `limit: 60`;
   - an `h1` with the type label, the empty state, and a load-more button.
 
   Read the static-exports guide's dynamic routes section first (FR-013).
-- [ ] T117 [P] [US7] Add a "See all" React Aria `Link` to each row header in
+- [x] T117 [P] [US7] Add a "See all" React Aria `Link` to each row header in
   `src/components/category-row.tsx`, pointing to `/browse/<routeSlug>/` with an accessible name of
   "See all <Type label>".
-- [ ] T118 [P] [US7] Show the download count in `src/components/detail/detail-facts.tsx`: "Downloaded
+- [x] T118 [P] [US7] Show the download count in `src/components/detail/detail-facts.tsx`: "Downloaded
   N time(s)", hidden when N is 0 (FR-021).
 
 **Checkpoint**: Every user story is implemented and works on its own.
@@ -1050,6 +1063,13 @@ download increases the item's displayed count by one.
   `specs/001-content-forge-mvp/research.md`, check every checkbox in this file, and open the PR from
   `001-content-forge-mvp` to `master` linking issue #1, with a per-principle compliance note
   (constitution: Development Workflow).
+- [ ] T128 Retire the beta preview's stand-ins once the backend is live (US1–US3 complete):
+  - point `src/lib/data/content.ts` at AppSync only and delete `src/lib/data/demo/`,
+    `public/demo/`, and `scripts/demo/`;
+  - replace the simulated session in `src/lib/auth/session.tsx` with the Cognito implementation
+    (T035), and remove `BetaNotice`, `DEMO_MODE`, and the `BetaPreview` download error;
+  - delete the `content-forge-beta` Amplify app and `scripts/beta/`, or repoint the script at a
+    preview branch of the production app.
 
 ---
 
