@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Halcyon · Live demo</title>
+<style>
+  body { margin: 0; font-family: Helvetica, Arial, sans-serif; background: #F4F1EA; color: #1C1C1C; }
+  header, main, footer { max-width: 1120px; margin: 0 auto; padding: 24px; }
+  header { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 32px; height: 32px; border-radius: 8px; background: #2F5BEA; }
+  nav { margin-left: auto; display: flex; gap: 24px; }
+  nav a { color: inherit; opacity: 0.75; text-decoration: none; }
+  h1 { font-size: clamp(40px, 7vw, 72px); line-height: 1.05; margin: 64px 0 16px; }
+  h1 span { color: #2F5BEA; }
+  p { font-size: 18px; line-height: 1.6; max-width: 56ch; opacity: 0.8; }
+  .cta { display: inline-block; margin-top: 16px; padding: 16px 28px; border-radius: 999px; background: #2F5BEA; color: #F4F1EA; font-weight: 700; text-decoration: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin: 72px 0; }
+  .card { padding: 24px; border-radius: 20px; background: color-mix(in srgb, #1C1C1C 7%, transparent); }
+  .card i { display: block; width: 48px; height: 48px; border-radius: 12px; background: #2F5BEA; margin-bottom: 16px; }
+  footer { opacity: 0.6; font-size: 14px; }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><strong>Halcyon</strong>
+  <nav><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#contact">Contact</a></nav></header>
+<main>
+  <h1>Build something<br><span>people remember.</span></h1>
+  <p>This is a stand-in live demo generated for the Content Forge beta preview. The real catalog hosts each
+  template's own files here, unzipped from the purchase.</p>
+  <a class="cta" href="#features">Get started</a>
+  <section id="features" class="grid">
+    <div class="card"><i></i><h2>Fast</h2><p>Plain HTML and CSS, no build step.</p></div>
+    <div class="card"><i></i><h2>Flexible</h2><p>Nine page layouts, light and dark.</p></div>
+    <div class="card"><i></i><h2>Friendly</h2><p>Accessible components and clear docs.</p></div>
+  </section>
+</main>
+<footer>Demo content · Halcyon</footer>
+</body>
+</html>

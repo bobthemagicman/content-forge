@@ -82,3 +82,6 @@ ingest-report*.json
 # licensed fonts: not redistributable, so never committed (see quickstart §2, step 5)
 src/app/fonts/*.woff
 src/app/fonts/*.woff2
+
+# playwright mcp screenshots and snapshots
+.playwright-mcp/

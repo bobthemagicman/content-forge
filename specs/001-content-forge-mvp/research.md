@@ -298,6 +298,10 @@ they're the first tasks of implementation.
 - **Alternatives considered**:
   - A hand-rolled carousel: re-implements accessibility.
   - `Virtualizer`: unnecessary at ≤ hundreds of items per row. Add it later if needed.
+- **Outcome (T087, 2026-10-30)**: `react-aria-components` 1.22.1 exports `GridListLoadMoreItem`
+  (`onLoadMore`, `isLoading`), so rows use it. Mixing it with dynamic items needs a
+  `<Collection items>` inside the `GridList`. Toasts are still `UNSTABLE_`-prefixed in this version
+  and are imported only in `src/components/ui/toast.tsx` (T032).
 
 ## R13. Images and fonts
 
