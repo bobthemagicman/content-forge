@@ -1,0 +1,40 @@
+{
+  "version": "1.4",
+  "auth": {
+    "aws_region": "us-west-2",
+    "user_pool_id": "us-west-2_E2Etest00",
+    "user_pool_client_id": "e2etestclientid0000000000",
+    "identity_pool_id": "us-west-2:00000000-0000-4000-8000-000000000000",
+    "mfa_methods": [],
+    "standard_required_attributes": ["email"],
+    "username_attributes": ["email"],
+    "user_verification_types": ["email"],
+    "groups": [],
+    "mfa_configuration": "NONE",
+    "password_policy": {
+      "min_length": 8,
+      "require_lowercase": true,
+      "require_numbers": true,
+      "require_symbols": true,
+      "require_uppercase": true
+    },
+    "oauth": {
+      "identity_providers": ["GOOGLE"],
+      "redirect_sign_in_uri": ["http://localhost:3000/auth/callback/", "http://localhost:4173/auth/callback/"],
+      "redirect_sign_out_uri": ["http://localhost:3000/", "http://localhost:4173/"],
+      "response_type": "code",
+      "scopes": ["openid", "email", "profile"],
+      "domain": "e2e-test.auth.us-west-2.amazoncognito.com"
+    },
+    "unauthenticated_identities_enabled": true
+  },
+  "data": {
+    "url": "https://e2e.appsync-api.us-west-2.amazonaws.com/graphql",
+    "aws_region": "us-west-2",
+    "default_authorization_type": "AMAZON_COGNITO_USER_POOLS",
+    "authorization_types": ["AWS_IAM"]
+  },
+  "custom": {
+    "assetsBaseUrl": "https://assets.e2e.test"
+  }
+}

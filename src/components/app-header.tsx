@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import NextLink from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import {
   Button as AriaButton,
   Header,
@@ -13,7 +15,7 @@ import {
   Separator,
 } from "react-aria-components";
 import { LogOutIcon, LogoMark, MenuIcon } from "@/components/icons";
-import { initials, useSession } from "@/lib/auth/session";
+import { initials, type SessionUser, useSession } from "@/lib/auth/session";
 import { CONTENT_TYPES } from "@/lib/content-types";
 import { cx } from "@/lib/cx";
 import { jumpToRow } from "@/lib/jump-to-row";
@@ -126,9 +128,7 @@ function UserMenu() {
         className="inline-flex size-11 cursor-pointer items-center justify-center rounded-full"
       >
         <span className="inline-flex size-9 rounded-full bg-[linear-gradient(135deg,#affc41,#d92b83)] p-0.5">
-          <span className="flex flex-1 items-center justify-center rounded-full bg-raised text-xs font-bold text-text-strong">
-            {initials(user.name)}
-          </span>
+          <Avatar user={user} />
         </span>
       </AriaButton>
       <Popover placement="bottom end" offset={8} className={popover}>
@@ -148,5 +148,32 @@ function UserMenu() {
         </Menu>
       </Popover>
     </MenuTrigger>
+  );
+}
+
+/**
+ * The Google profile picture, or initials when there's none or it fails to load (T049). It's a
+ * Google URL, so it skips the catalog image loader, which only handles asset keys (research R13).
+ */
+function Avatar({ user }: { user: SessionUser }) {
+  const [failed, setFailed] = useState(false);
+  if (user.picture && !failed) {
+    return (
+      <Image
+        src={user.picture}
+        alt=""
+        width={32}
+        height={32}
+        unoptimized
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className="size-8 rounded-full object-cover"
+      />
+    );
+  }
+  return (
+    <span className="flex flex-1 items-center justify-center rounded-full bg-raised text-xs font-bold text-text-strong">
+      {initials(user.name)}
+    </span>
   );
 }
