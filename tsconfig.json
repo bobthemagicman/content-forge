@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "$amplify/*": [
+        "./tests/setup/amplify-generated/*"
       ]
     }
   },

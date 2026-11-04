@@ -52,7 +52,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     - `test:ingest-e2e` (`vitest run -c vitest.ingest-e2e.config.ts`);
     - `ingest` (`tsx tools/ingest/cli.ts`);
   - create `.nvmrc` containing `24`.
-  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root only, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. Still to do: `test:e2e`, `test:smoke`, `test:infra`, `test:ingest-e2e`, `ingest`, and the `amplify`/`infra` typecheck projects.
+  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root plus `amplify/`, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. Still to do: `test:e2e`, `test:smoke`, `test:infra`, `test:ingest-e2e`, `ingest`, and the `infra` typecheck project.
 - [ ] T002 Install dependencies, updating `package.json` and `package-lock.json`:
   - **runtime**: `aws-amplify`, `react-aria-components`;
   - **backend dev**: `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`,
@@ -66,7 +66,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
 
   Run `npx playwright install chromium firefox webkit`. Every dependency here is justified in
   plan.md Complexity Tracking (Principle VI).
-  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Still to do: `aws-amplify`, the backend and ingest packages, the remaining test packages, and the Playwright browsers.
+  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. Still to do: the remaining backend packages (`aws-jwt-verify`, `@aws-sdk/*`), the ingest packages, the remaining test packages, and the Playwright browsers. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. To change dependencies, regenerate the lockfile from scratch, then check that `npm ci` passes and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
 - [x] T003 [P] Rewrite `next.config.ts` per research R1:
   - add `output: 'export'`, `trailingSlash: true`,
     `images: { loader: 'custom', loaderFile: './src/lib/assets/image-loader.ts' }`;
@@ -87,6 +87,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
   `.amplify/generated` doesn't exist yet:
   - `tests/setup/amplify-generated/env/pre-sign-up.ts` and `.../env/get-download-url.ts`, each
     exporting `env` typed with that function's variables and read from `process.env`.
+  - **Progress (auth):** `amplify/package.json`, `amplify/tsconfig.json`, and the `pre-sign-up` env stub are in. The root `tsconfig.json` also maps `$amplify/*` to the stubs, because unit tests pull handlers into the root program. Still to do: the `get-download-url` stub (T093).
 - [ ] T006 [P] Create the Vitest config:
   - `vitest.config.ts`: jsdom environment, `@vitejs/plugin-react`, `@/` alias, include
     `tests/unit/**` and `tests/component/**`, setup file `tests/setup/vitest.setup.ts`, which imports
@@ -96,7 +97,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
   - `vitest.infra.config.ts`: node environment, include `tests/infra/**`;
   - `vitest.ingest-e2e.config.ts`: node environment, include `tests/e2e-ingest/**`, `testTimeout`
     300 s, no file parallelism.
-  - **Progress (beta preview):** `vitest.config.ts` and `tests/setup/vitest.setup.ts` exist. Still to do: the `$amplify` alias, `vitest.infra.config.ts`, and `vitest.ingest-e2e.config.ts`.
+  - **Progress (beta preview):** `vitest.config.ts` and `tests/setup/vitest.setup.ts` exist. The `$amplify` alias is in, and the setup file registers Testing Library's `cleanup` (Vitest runs without globals). Still to do: `vitest.infra.config.ts` and `vitest.ingest-e2e.config.ts`.
 - [ ] T007 [P] Create `playwright.config.ts`:
   - project `e2e`: `testDir: tests/e2e`, Chromium. The config's `webServer` runs
     `node scripts/serve-out.mjs` on port 4173;
@@ -118,7 +119,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     `npm test` → `npm run build` → `npx playwright install --with-deps chromium firefox webkit` →
     `npm run test:e2e` → `npm run test:infra`;
   - upload the Playwright report on failure.
-  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. Still to do: `use-e2e-outputs`, the Playwright E2E run, `test:infra`, and the report upload.
+  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. `use-e2e-outputs` runs from `prebuild`/`typecheck` (T041). Still to do: the Playwright E2E run, `test:infra`, and the report upload.
 
 ---
 
@@ -163,7 +164,7 @@ that every story needs
 
 ### Backend: auth, data, asset plane
 
-- [ ] T014 Create `amplify/auth/pre-sign-up/resource.ts` (`defineFunction({ name: 'pre-sign-up',
+- [x] T014 Create `amplify/auth/pre-sign-up/resource.ts` (`defineFunction({ name: 'pre-sign-up',
   runtime: 24, logging: { retention: '2 weeks' }, environment: { ALLOW_DOMAIN: 'example.com' } })`)
   and
   `amplify/auth/pre-sign-up/handler.ts`. The handler:
@@ -171,7 +172,7 @@ that every story needs
   - throws `Error('ONLY_ALLOWED_DOMAIN')` unless the email ends exactly with `@example.com`;
   - applies to every `triggerSource`, including `PreSignUp_ExternalProvider` (research R3,
     FR-001/002).
-- [ ] T015 [P] Write unit tests in `tests/unit/auth/pre-sign-up.test.ts`. Cover:
+- [x] T015 [P] Write unit tests in `tests/unit/auth/pre-sign-up.test.ts`. Cover:
   - `user@example.com` accepted;
   - `USER@Example.com` accepted;
   - `user@gmail.com` rejected;
@@ -179,7 +180,7 @@ that every story needs
   - `user@sub.example.com` rejected;
   - missing email rejected;
   - `PreSignUp_ExternalProvider` and `PreSignUp_AdminCreateUser` sources.
-- [ ] T016 Create `amplify/auth/resource.ts` with `defineAuth`:
+- [x] T016 Create `amplify/auth/resource.ts` with `defineAuth`:
   - `loginWith.email: true` (required by Amplify; no password UI is exposed);
   - `externalProviders.google` with `clientId: secret('GOOGLE_CLIENT_ID')`,
     `clientSecret: secret('GOOGLE_CLIENT_SECRET')`, scopes `openid email profile`, and
@@ -188,6 +189,7 @@ that every story needs
     `http://localhost:3000/auth/callback/`;
   - `logoutUrls`: `https://content.example.com/` and `http://localhost:3000/`;
   - `triggers: { preSignUp }`.
+  - **Done:** `example.com` and `content.example.com` come from `ALLOWED_EMAIL_DOMAIN` and `APP_ORIGIN` at synth time (`amplify/config.ts`), so the owner's domain stays out of the repo. The app client's OAuth scopes are `OPENID EMAIL PROFILE`. Because `email` login is on, the client also lists `COGNITO` as a provider; no password UI exists, and `allowAdminCreateUserOnly` blocks self sign-up.
 - [ ] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
   [data-model.md](./data-model.md#entity-content):
   - enums `ContentType`, `ContentStatus`, `LicenseType`;
@@ -309,6 +311,7 @@ that every story needs
   - `backend.addOutput({ custom: { assetsBaseUrl, assetsBucketName, contentTableName:
     backend.data.resources.tables['Content'].tableName, region } })`, per
     [contracts/data-api.md](./contracts/data-api.md#custom-outputs-amplify_outputsjson--custom).
+  - **Progress (auth):** `amplify/backend.ts` defines `auth` and `preSignUp`, with the `allowAdminCreateUserOnly` and 7-day refresh-token overrides (checked by a local synth). Still to do: `data`, `envName`, the signing key, the `assets` stack, and the custom outputs.
 - [ ] T026 Create `amplify.yml`:
   - `backend.phases.build`: `nvm install 24 && nvm use 24`, `npm ci`,
     `npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID`;
@@ -360,7 +363,7 @@ that every story needs
   Lato 400 from the `@fontsource/lato` dev dependency into those paths as a stand-in and log a
   warning, so the build never fails on a missing font. Amplify builds get the real files from
   `FONTS_S3_URI` (T026).
-- [ ] T030 [P] Create `src/lib/auth/amplify-config.ts`. It exports an idempotent
+- [x] T030 [P] Create `src/lib/auth/amplify-config.ts`. It exports an idempotent
   `configureAmplify()` that calls `Amplify.configure(outputs)` with
   `import outputs from '@/../amplify_outputs.json'`, and an `assetsBaseUrl()` getter that reads
   `outputs.custom.assetsBaseUrl`.
@@ -376,22 +379,22 @@ that every story needs
 
   All follow the component specs in `design-system/content-forge/MASTER.md`: brand tokens, amber
   focus rings, lime for the one primary action, and no `#D92B83` text below large-text size.
-- [ ] T033 Create `src/app/providers.tsx` (`'use client'`). It calls `configureAmplify()` once and
+- [x] T033 Create `src/app/providers.tsx` (`'use client'`). It calls `configureAmplify()` once and
   wraps children in React Aria `RouterProvider` (`navigate={router.push}` from `next/navigation`
   `useRouter`) and the toast region.
-  - **Progress (beta preview):** `RouterProvider`, the toast region, and the session provider are wired. Still to do: `configureAmplify()` (T030).
+  - **Done:** `RouterProvider`, the toast region, and the session provider are wired. `Providers` picks `AuthProvider` (Cognito) or, with `DEMO_MODE`, `DemoSessionProvider`. `configureAmplify()` is idempotent and called by its users (`AuthProvider`, the callback page, `signIn`) rather than once here, so effect order (children first) can't leave Amplify unconfigured.
 - [x] T034 Update `src/app/layout.tsx`:
   - `<html lang="en">` with the font variables from `src/app/fonts.ts`;
   - `<body>` wrapped in `Providers`;
   - `metadata` title "Content Forge" and `robots: { index: false }`.
-- [ ] T035 Create `src/lib/auth/auth-provider.tsx` and `src/lib/auth/use-session.ts`:
+- [x] T035 Create `src/lib/auth/auth-provider.tsx` and `src/lib/auth/use-session.ts`:
   - `AuthProvider` (client) resolves `fetchAuthSession()` and `fetchUserAttributes()`, and exposes
     `{ status: 'loading'|'signedIn'|'signedOut', user: { email, name, picture }, idToken(),
     signOut() }`;
   - when signed out, it calls `router.replace('/')`;
   - `signOut()` calls `GET <assetsBaseUrl>/_session/signout` (`credentials: 'include'`), then
     Amplify `signOut()`, then navigates to `/`.
-  - **Progress (beta preview):** `src/lib/auth/session.tsx` provides `useSession()` with `status`, `user`, `signIn()`, and `signOut()`, simulated with localStorage for the beta preview. Still to do: the Cognito/Amplify implementation behind the same API, and the `/_session/signout` call.
+  - **Done:** `src/lib/auth/session.tsx` holds the `Session` API and `useSession()` (in place of `use-session.ts`); `src/lib/auth/auth-provider.tsx` implements it with Cognito and adds `signIn()`. The user comes from the ID token's claims rather than `fetchUserAttributes()`, which would need the `aws.cognito.signin.user.admin` scope. The `(app)` layout does the signed-out redirect. `/_session/signout` is called (best effort) once `custom.assetsBaseUrl` exists (T025). The beta preview's simulation lives on in `src/lib/auth/demo-session.tsx` until T128.
 - [ ] T036 Create `src/lib/assets/asset-session.tsx`. `AssetSessionProvider`:
   - calls `GET <assetsBaseUrl>/_session` with header `X-Id-Token` and `credentials: 'include'`;
   - renders a full-page skeleton until it gets `204`;
@@ -425,10 +428,11 @@ that every story needs
 
 ### Test harnesses
 
-- [ ] T041 [P] Create `tests/e2e/fixtures/amplify_outputs.e2e.json`, a valid-shaped Amplify outputs
+- [x] T041 [P] Create `tests/e2e/fixtures/amplify_outputs.e2e.json`, a valid-shaped Amplify outputs
   file with a fake user pool, AppSync URL `https://e2e.appsync-api.us-west-2.amazonaws.com/graphql`,
   and `custom.assetsBaseUrl: https://assets.e2e.test`. Also create `scripts/ci/use-e2e-outputs.mjs`,
   which copies it to `amplify_outputs.json` only when that file is missing.
+  - **Done:** `use-e2e-outputs.mjs` also runs from `predev`, `prebuild`, and `typecheck`, so CI and the beta preview build without a backend; it refuses to substitute on Amplify Hosting (`AWS_BRANCH` set). `.gitignore` excepts the fixture from `amplify_outputs*`.
 - [ ] T042 [P] Create the E2E fixture catalog:
   - `tests/e2e/fixtures/catalog.ts`: two or three published items per `ContentType`, one draft, one
     website template with `demoEntryPath`, one without it but with `externalDemoUrl`, and one item
@@ -476,7 +480,7 @@ without a session are denied (quickstart V1–V4, V12).
   - a signed-out user visiting `/browse/` is redirected to `/`;
   - sign-out calls `/_session/signout` and lands on `/`;
   - `expectNoA11yViolations` passes on `/`.
-- [ ] T046 [P] [US1] Write component tests in `tests/component/landing.test.tsx`: error query values
+- [x] T046 [P] [US1] Write component tests in `tests/component/landing.test.tsx`: error query values
   `domain`/`signin` map to the right messages, and the sign-in button is keyboard-operable.
 
 ### Implementation for User Story 1
@@ -487,20 +491,21 @@ without a session are denied (quickstart V1–V4, V12).
   - the error banner reads `?error=` through `useSearchParams` inside `<Suspense>`;
   - an existing session triggers `router.replace('/browse/')`;
   - no catalog data is fetched (FR-002–FR-004).
-  - **Progress (beta preview):** Layout, Google-branded button, `?error=` banner inside `<Suspense>`, and the signed-in redirect are in. Still to do: the owner's logo file (a placeholder mark is used) and `signInWithRedirect` in place of the simulated sign-in.
-- [ ] T048 [P] [US1] Implement `src/app/auth/callback/page.tsx` (client):
+  - **Progress (beta preview):** Layout, Google-branded button, `?error=` banner inside `<Suspense>`, and the signed-in redirect are in. `signInWithRedirect` is in (through `useSession().signIn()`, outside `DEMO_MODE`). Still to do: the owner's logo file (a placeholder mark is used).
+- [x] T048 [P] [US1] Implement `src/app/auth/callback/page.tsx` (client):
   - listen to the Amplify `Hub` `auth` channel (`signInWithRedirect`,
     `signInWithRedirect_failure`) and parse `error_description` from the URL;
   - on success, `router.replace('/browse/')`;
   - on an error containing `ONLY_ALLOWED_DOMAIN` or `PreSignUp`, go to `/?error=domain`; on any
     other error, `/?error=signin`;
   - show a skeleton while waiting.
-- [ ] T049 [P] [US1] Implement `src/components/app-header.tsx`: the wordmark linking to `/browse/`,
+  - **Done** in `src/components/auth/auth-callback.tsx`. It reads `error_description` before Amplify cleans up the URL, and resolves the outcome with `fetchAuthSession()` (which waits for an in-flight redirect) as well as Hub, navigating once.
+- [x] T049 [P] [US1] Implement `src/components/app-header.tsx`: the wordmark linking to `/browse/`,
   the signed-in user's name and avatar (`picture`, falling back to initials), and a "Sign out"
   button calling `useSession().signOut()` (FR-006, FR-014). Render the avatar with `next/image`
   and `unoptimized`, because it's a Google URL and the catalog image loader only handles asset keys
   (research R13). The CSP allows `*.googleusercontent.com` (R18).
-  - **Progress (beta preview):** Wordmark, type nav, and the user menu (name, email, initials, Sign out) are in. Still to do: the Google profile picture avatar, once real user attributes exist.
+  - **Progress (beta preview):** Wordmark, type nav, and the user menu (name, email, initials, Sign out) are in. The Google profile picture avatar is in, falling back to initials.
 - [x] T050 [US1] Add `AppHeader` above `<main>` in `src/app/(app)/layout.tsx`.
 - [x] T051 [P] [US1] Create a placeholder signed-in home in `src/app/(app)/browse/page.tsx` (`h1`
   "Browse"). It gives the redirect a target, and US2 (T088) replaces it.

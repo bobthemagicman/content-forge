@@ -35,6 +35,11 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
    - secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`;
    - env vars `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget
      alert goes);
+   - env vars `ALLOWED_EMAIL_DOMAIN` (the Workspace domain allowed to sign in) and `APP_ORIGIN`
+     (`https://content.<domain>`). Both default to the `example.com` placeholders
+     (`amplify/config.ts`), so a deploy without them only admits `@example.com`;
+   - env `NEXT_PUBLIC_DEMO_MODE=0`, so the front end uses Cognito instead of the beta preview's
+     simulated sign-in;
    - the custom domain `content.example.com` → branch `master`.
 
    Confirm the platform/framework setting from research R2.
@@ -49,9 +54,15 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 ```bash
 npm ci
 scripts/bootstrap/create-signing-keys.sh --env sandbox-$(whoami) --profile <p>   # once per sandbox
-npx ampx sandbox --profile <p>        # personal cloud sandbox; writes amplify_outputs.json
-npm run dev                           # http://localhost:3000
+npx ampx sandbox secret set GOOGLE_CLIENT_ID --profile <p>       # once per sandbox
+npx ampx sandbox secret set GOOGLE_CLIENT_SECRET --profile <p>   # once per sandbox
+ALLOWED_EMAIL_DOMAIN=<domain> npx ampx sandbox --profile <p>      # writes amplify_outputs.json
+NEXT_PUBLIC_DEMO_MODE=0 npm run dev                              # http://localhost:3000
 ```
+
+Plain `npm run dev` runs the beta preview: simulated sign-in on the demo catalog. Without a sandbox,
+`predev`/`prebuild` copy the E2E fixture to `amplify_outputs.json` so the build still works;
+`ampx sandbox` overwrites it with the real file.
 
 Sandboxes use their own bucket, table, Cognito pool, and signing keys. Commit the sandbox's
 `keys/sandbox-<user>.public-key.pem`. The callback and logout URLs for `http://localhost:3000` are in
