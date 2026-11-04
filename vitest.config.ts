@@ -5,7 +5,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: [
+      { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+      // Amplify function handlers import `$amplify/env/<name>`; tests use the committed stubs (T005).
+      { find: /^\$amplify\/(.*)$/, replacement: fileURLToPath(new URL("./tests/setup/amplify-generated/$1", import.meta.url)) },
+    ],
   },
   test: {
     environment: "jsdom",
