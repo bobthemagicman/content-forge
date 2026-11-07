@@ -444,6 +444,9 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
 
 - **Decision**: there are two kinds of environment, chosen in `amplify/backend.ts` by
   `envName`: `process.env.AWS_BRANCH` when set, otherwise `sandbox-<os.userInfo().username>`.
+  It names the key file and the SSM parameters, so `amplify/environment.ts` accepts only `master`
+  and `sandbox-[A-Za-z0-9._-]+`, the names the key script accepts, and stops synth otherwise (a
+  branch such as `feature/x` would otherwise produce a nested parameter path no script can create).
 
   | Aspect | `master` (production) | Personal sandbox (`npx ampx sandbox`) |
   |---|---|---|

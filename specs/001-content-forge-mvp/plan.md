@@ -228,6 +228,7 @@ still be tested on their own against mocked data.
 | `yauzl` | Streaming zip reads with per-entry path control for traversal and zip-bomb guards (FR-032) | `unzipper`/`adm-zip` give less control over entry validation, or load whole archives into memory |
 | `sharp` | Image resizing and WebP encoding for every preview | Shelling out to ImageMagick adds a system dependency and is slower |
 | `playwright` (dev) | E2E and axe tests, **and** website screenshots in ingest. One dependency covers both | Puppeteer would be a second browser stack |
+| `esbuild` (dev) | CDK's `NodejsFunction` bundles the session Lambda with it at synth | Without a top-level copy, CDK falls back to bundling in Docker, which every developer machine and the Amplify build would then need |
 | `tsx` (dev) | Run the TypeScript ingest CLI without a build step | `tsc` + `node dist/` adds a build artifact for a local tool |
 | `vitest`, `@testing-library/react`, `@testing-library/user-event`, `jsdom`, `aws-sdk-client-mock`, `@axe-core/playwright` (dev) | Test layers required by Principle V | No lighter combination covers unit, component, and accessibility testing |
 | `@vitejs/plugin-react` (dev) | Lets Vitest compile JSX/TSX for component tests | Vitest has no built-in React transform. Configuring esbuild JSX by hand is the same thing with more setup |
