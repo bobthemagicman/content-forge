@@ -46,6 +46,14 @@ PARAM="/content-forge/${ENV_NAME}/cloudfront/private-key"
 PUBLIC_KEY="${ROOT}/amplify/custom/assets-cdn/keys/${ENV_NAME}.public-key.pem"
 aws_() { aws --profile "$PROFILE" --region "$REGION" "$@"; }
 
+# AWS CLI history records request parameters in plain text (~/.aws/cli/history), which would
+# include the private key sent to SSM.
+if [[ "$(aws configure get cli_history --profile "$PROFILE" 2>/dev/null || true)" == "enabled" ]]; then
+  echo "AWS CLI history is enabled for profile $PROFILE and would record the private key." >&2
+  echo "Disable it first: aws configure set cli_history disabled --profile $PROFILE" >&2
+  exit 1
+fi
+
 if aws_ ssm get-parameter --name "$PARAM" --query Parameter.Name --output text >/dev/null 2>&1; then
   if [[ "$ROTATE" != "1" ]]; then
     echo "$PARAM already exists. Pass --rotate to replace it." >&2

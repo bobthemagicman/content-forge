@@ -13,11 +13,21 @@
 | `/_session/signout` | same | none | Disabled | Clears cookies |
 | anything else | — | — | — | `403` |
 
-- HTTPS only (`redirect-to-https`), TLS 1.2+, HTTP/2 and HTTP/3.
-- `/v/*` responses carry `X-Content-Type-Options: nosniff`.
+- HTTPS only, with no HTTP redirect (`https-only`: a plain-HTTP request carrying a signed URL or
+  token would already have exposed it), TLS 1.2+, HTTP/2 and HTTP/3.
+- Every response carries `Strict-Transport-Security: max-age=31536000` and
+  `X-Content-Type-Options: nosniff`.
+- The default behavior is denied twice: a CloudFront Function answers `403`, and the trusted key
+  group would refuse an unsigned request anyway.
 - Demo pages under `/v/<id>/demo/**` are third-party code. They're same-site with the app but
   **cross-origin**, so they can't read `content.example.com` storage. The app sets no cookies on
   `.example.com`.
+- **Accepted risk (2026-11-07):** because demo scripts run on `assets.example.com`, a malicious
+  template could set cookies on `.example.com`, send same-site requests to other `*.example.com`
+  apps, show a fake sign-in page on a trusted host, or read other catalog previews. Serving demos
+  from a separate registrable domain would remove this; the owner chose not to. Import only
+  templates from trusted marketplaces. A restrictive CSP on `/v/*/demo/*` is a possible later
+  mitigation, to be tested on a sandbox first.
 
 ## `GET /_session`
 
@@ -43,7 +53,7 @@ Sent with `fetch(url, { credentials: 'include', headers: { 'X-Id-Token': idToken
 
 | Status | When | Headers / body |
 |---|---|---|
-| `204` | Valid | 3 × `Set-Cookie` (`CloudFront-Policy`, `CloudFront-Signature`, `CloudFront-Key-Pair-Id`). Production: each `Domain=assets.example.com; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=43200`. Sandboxes: no `Domain`, `SameSite=None` instead (see Environments). Body: none. Also `X-Session-Expires: <ISO time>` |
+| `204` | Valid | 3 × `Set-Cookie` (`CloudFront-Policy`, `CloudFront-Signature`, `CloudFront-Key-Pair-Id`). Production: each `Path=/v/; Secure; HttpOnly; SameSite=Lax; Max-Age=43200`, host-only (no `Domain`), so no other host receives them and they're sent only where the policy applies. Sandboxes: `SameSite=None` instead (see Environments). Body: none. Also `X-Session-Expires: <ISO time>` |
 | `401` | Missing or invalid token | `{"error":"invalid_token"}` |
 | `403` | Wrong domain or bad origin | `{"error":"forbidden"}` |
 | `500` | Signing/config failure | `{"error":"internal"}` (logged) |
@@ -63,7 +73,7 @@ Returns `204` and sets the same three cookies with `Max-Age=0`. Called with
 This contract describes production. Personal sandboxes (research R19) differ only in:
 
 - **host**: the distribution's own `*.cloudfront.net` domain, which `custom.assetsBaseUrl` reports;
-- **cookies**: host-only and `SameSite=None; Secure; HttpOnly`, because `localhost` is cross-site;
+- **cookies**: `SameSite=None` instead of `Lax`, because `localhost` is cross-site;
 - **allowed origin**: `http://localhost:3000`;
 - **signing keys**: the sandbox's own key pair.
 

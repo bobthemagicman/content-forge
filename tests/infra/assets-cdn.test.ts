@@ -93,12 +93,22 @@ describe.each([
     expect(a.TrustedKeyGroups).toHaveLength(1);
     expect(v.CachePolicyId).toBe("658327ea-f89d-4fab-a63d-7e88639e58f6"); // CachingOptimized
     expect(a.CachePolicyId).toBe("4135ea2d-6df8-44a3-9df3-4b5a84be39ad"); // CachingDisabled
-    expect(v.ResponseHeadersPolicyId).toBeDefined();
+  });
+
+  it("sends HSTS and nosniff on every behavior", () => {
     template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
       ResponseHeadersPolicyConfig: Match.objectLike({
-        SecurityHeadersConfig: { ContentTypeOptions: { Override: true } },
+        SecurityHeadersConfig: {
+          ContentTypeOptions: { Override: true },
+          StrictTransportSecurity: { AccessControlMaxAgeSec: 31536000, IncludeSubdomains: false, Override: true },
+        },
       }),
     });
+    const [distribution] = Object.values(template.findResources("AWS::CloudFront::Distribution"));
+    const config = distribution!.Properties.DistributionConfig;
+    for (const b of [config.DefaultCacheBehavior, ...config.CacheBehaviors]) {
+      expect(b.ResponseHeadersPolicyId).toBeDefined();
+    }
   });
 
   it("sends /_session* to the function URL uncached, forwarding only the token and Origin", () => {
@@ -115,7 +125,7 @@ describe.each([
     });
   });
 
-  it("answers 403 by default, over HTTPS only, TLS 1.2+, HTTP/2 and 3", () => {
+  it("denies the default behavior twice, and serves HTTPS only (no redirect), HTTP/2 and 3", () => {
     template.hasResourceProperties("AWS::CloudFront::Function", {
       FunctionCode: Match.stringLikeRegexp("statusCode: 403"),
     });
@@ -123,13 +133,14 @@ describe.each([
       DistributionConfig: Match.objectLike({
         HttpVersion: "http2and3",
         DefaultCacheBehavior: Match.objectLike({
-          ViewerProtocolPolicy: "redirect-to-https",
+          ViewerProtocolPolicy: "https-only",
+          TrustedKeyGroups: [Match.anyValue()],
           FunctionAssociations: [Match.objectLike({ EventType: "viewer-request" })],
         }),
       }),
     });
     for (const pattern of ["/v/*", "/a/*", "/_session*"]) {
-      expect(behavior(template, pattern).ViewerProtocolPolicy).toBe("redirect-to-https");
+      expect(behavior(template, pattern).ViewerProtocolPolicy).toBe("https-only");
     }
   });
 

@@ -25,12 +25,16 @@ describe("catalog schema (data-model.md, research R4)", () => {
     expect(sdl).toContain("@auth(rules: [{allow: private, operations: [read]}])");
   });
 
-  it("defines the slug index and the sparse type index", () => {
-    expect(sdl).toMatch(/slug: String! @index\(queryField: "listContentBySlug"\)/);
+  it("defines only sparse indexes, so no query can return a draft", () => {
+    // Every index gets a public query, so `slug` itself must stay unindexed.
+    expect(sdl).toMatch(/\n {2}slug: String!\n/);
+    expect(sdl).toMatch(/publishedSlug: String @index\(queryField: "listContentBySlug"\)/);
+    expect(sdl.match(/@index\(/g)).toHaveLength(2);
     expect(sdl).toMatch(
       /type: ContentType! @index\(sortKeyFields: \["publishedAt"\], queryField: "listContentByTypeAndPublishedAt"\)/,
     );
-    // Optional, so drafts can leave it out and stay out of the type index.
+    // Optional, so drafts can leave both keys out and stay out of both indexes.
     expect(sdl).toMatch(/publishedAt: AWSDateTime\n/);
+    expect(sdl).toMatch(/publishedSlug: String @/);
   });
 });

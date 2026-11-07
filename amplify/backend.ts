@@ -15,8 +15,21 @@ const backend = defineBackend({ auth, data, preSignUp });
 const envName = process.env.AWS_BRANCH ?? `sandbox-${userInfo().username}`;
 const isProduction = envName === "master";
 
+// The domain settings default to `example.com` placeholders so the real domain stays out of this
+// repo. Production must set them: a placeholder deploy would fail closed, but confusingly.
+if (isProduction) {
+  const missing = ["ALLOWED_EMAIL_DOMAIN", "APP_ORIGIN", "ASSETS_DOMAIN"].filter((name) => !process.env[name]);
+  if (missing.length) {
+    throw new Error(`Production needs ${missing.join(", ")} set on the Amplify app (quickstart §2).`);
+  }
+}
+
 // --- Auth overrides ---------------------------------------------------------------------------
-const { cfnUserPool, cfnUserPoolClient } = backend.auth.resources.cfnResources;
+const { cfnIdentityPool, cfnUserPool, cfnUserPoolClient } = backend.auth.resources.cfnResources;
+
+// No guest identities. The app never uses AWS credentials (src/lib/auth/amplify-config.ts leaves
+// the identity pool out), so a guest identity would only be an unused door.
+cfnIdentityPool.allowUnauthenticatedIdentities = false;
 
 // No self-service sign-up; accounts come only from federated Google sign-in, which the pre-sign-up
 // trigger limits to the allowed domain (research R3). Verify in T054 that first-time Google sign-in
