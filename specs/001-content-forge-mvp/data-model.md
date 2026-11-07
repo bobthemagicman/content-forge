@@ -21,7 +21,8 @@ by ingest when it writes directly (R5).
 | Field | Type | Required | Rules |
 |---|---|---|---|
 | `id` | ID (UUID v4) | ✔ | Assigned on first import and **never changes** on re-import |
-| `slug` | String | ✔ | `^[a-z0-9]+(?:-[a-z0-9]+)*$`, ≤ 80 chars, unique (enforced by ingest through a `bySlug` lookup before writing) |
+| `slug` | String | ✔ | `^[a-z0-9]+(?:-[a-z0-9]+)*$`, ≤ 80 chars, unique (enforced by ingest, which reads every `id`/`slug` pair from the table before writing). Deliberately **not indexed**: Amplify gives every index a public query, which would return drafts |
+| `publishedSlug` | String | when `PUBLISHED` | Equal to `slug`. **Absent (not null) when `DRAFT`**, which keeps drafts out of the sparse slug index |
 | `title` | String | ✔ | 1–200 chars. Defaults to the cleaned-up file name |
 | `type` | Enum `ContentType` | ✔ | See below |
 | `status` | Enum `ContentStatus` | ✔ | `DRAFT` \| `PUBLISHED` |
@@ -49,8 +50,11 @@ by ingest when it writes directly (R5).
 
 | Name | Partition key | Sort key | Used by |
 |---|---|---|---|
-| `bySlug` | `slug` | (none) | Detail page, ingest idempotency |
+| `byPublishedSlug` (sparse) | `publishedSlug` | (none) | Detail page |
 | `byTypeAndPublishedAt` (sparse) | `type` | `publishedAt` (desc in queries) | Browse rows, "See all" |
+
+Both indexes are sparse, so no API query can return a draft. Ingest finds existing items with a
+projected `Scan` of `id` and `slug` (the catalog is small, so it costs next to nothing).
 
 **Authorization**: `allow.authenticated().to(['read'])`. There are no API mutations. Writes come from
 the owner's IAM identity (ingest) and the `get-download-url` function role (`downloadCount` only).
@@ -87,11 +91,11 @@ Values in row order, which is also the display order (FR-007):
 ```text
 (none) ──ingest──▶ DRAFT ──ingest --publish (default)──▶ PUBLISHED
                      ▲                                       │
-                     └──────────ingest --unpublish───────────┘   (removes publishedAt)
+                     └──────────ingest --unpublish───────────┘   (removes publishedAt, publishedSlug)
 ```
 
 - By default ingest writes `PUBLISHED` with `publishedAt = now`, set on the first publish and
-  kept on re-imports. `--draft` writes `DRAFT` without `publishedAt`.
+  kept on re-imports, and `publishedSlug = slug`. `--draft` writes `DRAFT` without either.
 - Re-import of an existing slug: updates the metadata and preview keys, keeps `id`, `downloadCount`
   and `publishedAt`, and sets `updatedAt`.
 - Nothing is deleted in the MVP. Hiding an item means setting it to `DRAFT`.
@@ -171,6 +175,6 @@ immutable`. `demo/**` gets `max-age=3600`. `a/` objects get `Cache-Control: priv
 | Download URL ≤ 5 min | FR-018 | Download function (canned policy expiry) |
 | Archive paths safe, size-capped | FR-032 | Ingest extractor |
 | Demo path has no traversal | FR-034 | Ingest (normalize + reject `..`) |
-| Re-import doesn't duplicate | FR-037, SC-009 | Ingest `bySlug` lookup, stable `id` |
-| Drafts not listed | FR-007 | Sparse index (`publishedAt` absent) + client check on detail page |
+| Re-import doesn't duplicate | FR-037, SC-009 | Ingest slug lookup (table scan), stable `id` |
+| Drafts not listed or readable | FR-007, FR-016 | Sparse indexes (`publishedAt` and `publishedSlug` absent); no other query exists |
 | Download logging never blocks | FR-020 | Download function (`Promise.allSettled`) |

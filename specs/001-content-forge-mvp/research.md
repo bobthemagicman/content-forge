@@ -91,7 +91,7 @@ they're the first tasks of implementation.
   - One Amplify Data model, `Content`, with `allow.authenticated().to(['read'])`. There's no create,
     update or delete through the API.
   - Secondary indexes:
-    - `bySlug` (`slug`), used by the detail page;
+    - `byPublishedSlug` (`publishedSlug`, sparse), used by the detail page;
     - `byTypeAndPublishedAt` (`type` + `publishedAt`), used for browse rows.
   - **Drafts have no `publishedAt` attribute**, so they never appear in the sparse type index. Rows
     need no status filter, and pagination with `limit` stays accurate.
@@ -109,8 +109,12 @@ they're the first tasks of implementation.
   queries disabled, the transformer generates exactly `listContentBySlug` and
   `listContentByTypeAndPublishedAt`, with their resolvers and indexes, and no `getContent` or
   `listContents`. The `ContentType` enum works as the index partition key (stored as a DynamoDB
-  `S` attribute). Drafts stay unreadable through the API. Still to confirm against a deployed
-  backend: that both queries answer (T054).
+  `S` attribute).
+  - **Correction (security review):** the first version indexed `slug` itself, and Amplify gives
+    every index a public query, even without `queryField`, so `listContentBySlug` returned drafts.
+    The slug index is now sparse too, on `publishedSlug`, which only published items carry.
+    `slug` stays unindexed, and ingest checks slug uniqueness with a table scan.
+  - Still to confirm against a deployed backend: that both queries answer (T054).
 - **Rationale**:
   - Users only read. All writes come from the owner's ingest or from the download Lambda, which
     gives least privilege.
@@ -175,8 +179,8 @@ they're the first tasks of implementation.
   - The Lambda verifies the token with `aws-jwt-verify` (user pool, client ID, `token_use=id`) and
     checks the `email` domain. It then returns `204` with three `Set-Cookie` headers:
     `CloudFront-Policy`, `CloudFront-Signature`, `CloudFront-Key-Pair-Id`.
-  - Cookie attributes in production: `Domain=assets.example.com; Path=/; Secure; HttpOnly;
-    SameSite=Lax`, 12 h expiry. Personal environments use cross-site cookies instead (R19).
+  - Cookie attributes in production: host-only, `Path=/v/; Secure; HttpOnly; SameSite=Lax`, 12 h
+    expiry. Personal environments use cross-site cookies instead (R19).
   - `GET /_session/signout` clears the cookies.
   - The function URL uses `AuthType AWS_IAM` behind **OAC**, so it can't be invoked directly.
     Reserved concurrency is 5 to cap abuse cost.
@@ -341,7 +345,7 @@ they're the first tasks of implementation.
   | Video | `ffprobe -show_format -show_streams -of json`. Poster: `ffmpeg -ss <10%> -frames:v 1`. Preview: `ffmpeg -t 30 -vf scale=-2:720 -c:v libx264 -crf 28 -preset veryfast -an -movflags +faststart` |
   | Images/textures | `sharp` → WebP 320/640/1280 (and 2048 for detail), dimensions recorded |
   | Keys | `v/<id>/<name>.<importHash>.<ext>`. `importHash` is 8 hex chars, generated once per item per import run (SHA-256 of the source hash plus the run's start time) and shared by all of that item's generated files. Every re-import, including `--force`, gets new keys, so cached objects are never overwritten and stay immutable. Superseded keys are deleted after the record is written. Archives go to `a/<id>/<originalFilename>` |
-  | Identity | `slug` = kebab-case of the title or filename (overridable). Re-imports look up `bySlug` and keep the existing `id` (FR-037, SC-009) |
+  | Identity | `slug` = kebab-case of the title or filename (overridable). Re-imports find the existing item by slug (a projected table scan) and keep its `id` (FR-037, SC-009) |
   | Resume | `.ingest-state.json`, holding a per-item content hash and completed steps |
   | Report | `ingest-report.json` + a console summary |
 
@@ -445,7 +449,7 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
   |---|---|---|
   | App origin | `https://content.example.com` (Amplify Hosting) | `http://localhost:3000` (`next dev`) |
   | Asset domain | `assets.example.com`: custom domain, us-east-1 cert, Route 53 alias | The distribution's own `*.cloudfront.net` domain. No cert, no DNS record |
-  | Asset cookies | `Domain=assets.example.com; SameSite=Lax` (same-site) | Host-only (no `Domain`), `SameSite=None; Secure; HttpOnly` (cross-site) |
+  | Asset cookies | Host-only, `Path=/v/; SameSite=Lax` (same-site) | Host-only, `Path=/v/; SameSite=None; Secure; HttpOnly` (cross-site) |
   | `/_session` allowed origin | `https://content.example.com` | `http://localhost:3000` |
   | Signing keys | `/content-forge/master/...`, `keys/master.public-key.pem` | `/content-forge/sandbox-<user>/...`, `keys/sandbox-<user>.public-key.pem` |
   | AWS Budget | Yes (one per account covers all environments) | No |

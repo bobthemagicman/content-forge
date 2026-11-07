@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import { FetchError, JwksNotAvailableInCacheError, JwtExpiredError, KidNotFoundInJwksError } from "aws-jwt-verify/error";
 import { mockClient } from "aws-sdk-client-mock";
 import { createVerify, generateKeyPairSync } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -74,7 +75,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("GET /_session", () => {
-  it("issues exactly the three CloudFront cookies with the production attributes", async () => {
+  it("issues exactly the three CloudFront cookies, host-only and limited to /v/", async () => {
     const handler = await loadHandler();
     const result = await handler(withToken());
 
@@ -82,7 +83,7 @@ describe("GET /_session", () => {
     const jar = cookies(result);
     expect([...jar.keys()].sort()).toEqual(["CloudFront-Key-Pair-Id", "CloudFront-Policy", "CloudFront-Signature"]);
     for (const { attributes } of jar.values()) {
-      expect(attributes).toEqual([`Domain=${HOST}`, "SameSite=Lax", "Path=/", "Secure", "HttpOnly", "Max-Age=43200"]);
+      expect(attributes).toEqual(["Path=/v/", "Secure", "HttpOnly", "SameSite=Lax", "Max-Age=43200"]);
     }
     expect(jar.get("CloudFront-Key-Pair-Id")!.value).toBe("K2TESTKEYPAIR");
     expect(result.headers).toMatchObject({
@@ -124,8 +125,12 @@ describe("GET /_session", () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
-  it.each(["expired", "invalid"])("rejects an %s token with 401", async (reason) => {
-    verify.mockRejectedValue(new Error(`Token ${reason}`));
+  it.each([
+    ["an expired", new JwtExpiredError("Token expired", 0)],
+    ["a forged", new KidNotFoundInJwksError("kid not found")],
+    ["a malformed", new Error("Invalid JWT")],
+  ])("rejects %s token with 401", async (_, error) => {
+    verify.mockRejectedValue(error);
     const handler = await loadHandler();
     const result = await handler(withToken());
     expect(result.statusCode).toBe(401);
@@ -154,6 +159,18 @@ describe("GET /_session", () => {
     expect((await handler(withToken())).statusCode).toBe(204);
   });
 
+  it.each([
+    ["a JWKS fetch failure", new FetchError("https://cognito-idp.example/jwks", "ECONNRESET")],
+    ["no cached JWKS", new JwksNotAvailableInCacheError("not cached")],
+  ])("answers 500, not 401, on %s", async (_, error) => {
+    verify.mockRejectedValue(error);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handler = await loadHandler();
+    const result = await handler(withToken());
+    expect(result.statusCode).toBe(500);
+    expect(body(result)).toEqual({ error: "internal" });
+  });
+
   it("rejects a disallowed origin with 403 and no CORS grant", async () => {
     const handler = await loadHandler();
     const result = await handler(
@@ -167,7 +184,7 @@ describe("GET /_session", () => {
   it("uses host-only SameSite=None cookies in cross-site mode", async () => {
     const handler = await loadHandler("cross-site");
     for (const { attributes } of cookies(await handler(withToken())).values()) {
-      expect(attributes).toEqual(["SameSite=None", "Path=/", "Secure", "HttpOnly", "Max-Age=43200"]);
+      expect(attributes).toEqual(["Path=/v/", "Secure", "HttpOnly", "SameSite=None", "Max-Age=43200"]);
     }
   });
 
@@ -184,7 +201,7 @@ describe("GET /_session", () => {
     const handler = await loadHandler();
     await handler(withToken());
     await handler(withToken());
-    await handler(withToken("/_session/signout"));
+    await handler(withToken());
     expect(ssm.commandCalls(GetParameterCommand)).toHaveLength(3);
     const privateKeyCall = ssm
       .commandCalls(GetParameterCommand)
@@ -206,7 +223,7 @@ describe("GET /_session", () => {
 });
 
 describe("GET /_session/signout", () => {
-  it("clears all three cookies", async () => {
+  it("clears all three cookies with the attributes they were set with", async () => {
     const handler = await loadHandler();
     const result = await handler(request("/_session/signout"));
 
@@ -215,9 +232,15 @@ describe("GET /_session/signout", () => {
     expect([...jar.keys()].sort()).toEqual(["CloudFront-Key-Pair-Id", "CloudFront-Policy", "CloudFront-Signature"]);
     for (const { value, attributes } of jar.values()) {
       expect(value).toBe("");
-      expect(attributes).toContain("Max-Age=0");
-      expect(attributes).toContain(`Domain=${HOST}`);
+      expect(attributes).toEqual(["Path=/v/", "Secure", "HttpOnly", "SameSite=Lax", "Max-Age=0"]);
     }
+  });
+
+  it("clears the cookies even when SSM is unavailable", async () => {
+    ssm.on(GetParameterCommand).rejects(new Error("AccessDenied"));
+    const handler = await loadHandler();
+    expect((await handler(request("/_session/signout"))).statusCode).toBe(204);
+    expect(ssm.commandCalls(GetParameterCommand)).toHaveLength(0);
   });
 });
 

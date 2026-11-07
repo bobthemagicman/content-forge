@@ -41,7 +41,7 @@ the owner's domain throughout.
   `ffmpeg`/`ffprobe`, `soffice`, `pdftoppm`.
 
 **Storage**:
-- DynamoDB: Amplify Data `Content` table (with `bySlug` and sparse `byTypeAndPublishedAt` indexes),
+- DynamoDB: Amplify Data `Content` table (with sparse `byPublishedSlug` and `byTypeAndPublishedAt` indexes),
   plus the `DownloadEvents` table.
 - S3: one private bucket, `a/` for archives and `v/` for viewable assets (see
   [data-model.md](./data-model.md)).

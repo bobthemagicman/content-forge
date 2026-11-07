@@ -154,6 +154,7 @@ that every story needs
   4. deletes every temporary private-key file. Use `trap` cleanup and never write under the repo
      (research R8).
   - **Done:** `--region` defaults to `us-west-2`. `--rotate` passes `--overwrite`; without it the script exits if the parameter exists. Checked against a stubbed `aws`: first run, existing key, rotate, and a failed SSM write (exits non-zero and writes no public key). The temporary directory is removed in every case.
+  - **Security review:** the script refuses to run while AWS CLI history is enabled for the profile, because history records request parameters, including the private key, in plain text.
 - [x] T013 [P] Create `src/lib/content-types.ts`. It exports the `CONTENT_TYPES` ordered array:
   `WEBSITE_TEMPLATE`, `POWERPOINT_TEMPLATE`, `VIDEO`, `IMAGE`, `TEXTURE`, `OTHER`. Each entry has:
   - `label` (e.g., "Website Templates");
@@ -196,7 +197,7 @@ that every story needs
   [data-model.md](./data-model.md#entity-content):
   - enums `ContentType`, `ContentStatus`, `LicenseType`;
   - `archiveBytes` as `a.float()`, and `thumbKeys`/`meta` as `a.json()`;
-  - secondary indexes `index('slug').queryField('listContentBySlug')` and
+  - secondary indexes `index('publishedSlug').queryField('listContentBySlug')` (sparse; see the note below) and
     `index('type').sortKeys(['publishedAt']).queryField('listContentByTypeAndPublishedAt')`;
   - `.authorization(allow => [allow.authenticated().to(['read'])])`;
   - `.disableOperations(['mutations', 'subscriptions', 'queries'])`, so the default
@@ -214,6 +215,7 @@ that every story needs
 
   Export `type Schema`. Don't add `getDownloadUrl` yet; that's T094.
   - **Done:** R4 verified at synth (a local `defineBackend` synth, not yet a deployed sandbox). With all three operation groups disabled, the transformer still generates `listContentBySlug` and `listContentByTypeAndPublishedAt` and nothing else: no `getContent`, `listContents`, mutations, or subscriptions. The `ContentType` enum works as the index partition key (a DynamoDB `S` attribute). `tests/unit/data/schema.test.ts` keeps the enum in step with `CONTENT_TYPES`. Confirm the queries answer on the first deploy (T054).
+  - **Security review:** Amplify generates a public query for every index, even without `queryField`, so indexing `slug` made `listContentBySlug` return drafts. The slug index is now sparse, on `publishedSlug` (present only on published items), and `slug` itself is unindexed. The schema test asserts there are exactly two indexes.
 - [x] T018 Create `amplify/custom/assets-cdn/construct.ts`, part 1. The `AssetsCdn` construct takes
   props `{ envName, isProduction, publicKeyPem, userPoolId, userPoolClientId, allowedOrigins,
   assetsDomain?, certificateArn?, hostedZoneId?, hostedZoneName? }`. The four optional props are
@@ -237,6 +239,7 @@ that every story needs
 
   Follow [contracts/assets-cdn.md](./contracts/assets-cdn.md) and research R6.
   - **Done:** the four optional props, plus `budgetAlertEmail` (T019), are required in production. The bucket name is generated (a fixed `content-forge-assets-<env>` could already be taken: S3 names are global) and reported as `custom.assetsBucketName`. The bucket is retained on delete. The distribution also uses `PriceClass_100` (North America and Europe edges, Principle I).
+  - **Security review:** every behavior is `https-only` (no redirect) and sends HSTS and `nosniff`. The default behavior also has the trusted key group, so it stays closed even if the deny function were detached.
 - [x] T019 Extend `amplify/custom/assets-cdn/construct.ts`, part 2. Add:
   - DynamoDB table `DownloadEvents`: PK `contentId`, SK `downloadedAtEmail`, on-demand billing, PITR
     off;
@@ -263,7 +266,7 @@ that every story needs
   - **Errors**: `401`/`403`/`500` JSON bodies.
   - **SSM**: read the private key, key-pair ID, and asset host from the parameter names in env and
     cache them per container.
-  - **Done:** the allowed domain comes from env `ALLOW_DOMAIN` (as in pre-sign-up). Unknown paths return `404` and other methods `405`. `email_verified` is checked as boolean or string. Sign-out reads the asset host from SSM, since the production cookie's `Domain` must match to clear it.
+  - **Done:** the allowed domain comes from env `ALLOW_DOMAIN` (as in pre-sign-up). Unknown paths return `404` and other methods `405`. `email_verified` is checked as boolean or string. **Security review:** cookies are host-only with `Path=/v/` in both modes, so no other host or path receives them, and sign-out no longer reads SSM. A failure to fetch the user pool's signing keys answers `500`, not `401`, so an outage doesn't send users to sign in again.
 - [x] T021 Extend `amplify/custom/assets-cdn/construct.ts`, part 3. Add the session Lambda:
   - a `NodejsFunction` for `session-handler.ts`: `Runtime.NODEJS_24_X`, 256 MB, 5 s timeout,
     `reservedConcurrentExecutions: 5`, log group retention 14 days;
@@ -321,6 +324,7 @@ that every story needs
     backend.data.resources.tables['Content'].tableName, region } })`, per
     [contracts/data-api.md](./contracts/data-api.md#custom-outputs-amplify_outputsjson--custom).
   - **Progress (auth):** `amplify/backend.ts` defines `auth` and `preSignUp`, with the `allowAdminCreateUserOnly` and 7-day refresh-token overrides (checked by a local synth). **Done:** `data`, `envName`, the signing key, the `assets` stack, and the custom outputs are in. Production's asset domain and zone name come from `ASSETS_DOMAIN` and `HOSTED_ZONE_NAME` (`amplify/config.ts`, defaulting to `assets.example.com` and its parent). A local synth of both a branch environment and `master` passes.
+  - **Security review:** guest (unauthenticated) identities are off on the identity pool, and production refuses to synth unless `ALLOWED_EMAIL_DOMAIN`, `APP_ORIGIN`, and `ASSETS_DOMAIN` are set.
 - [x] T026 Create `amplify.yml`:
   - `backend.phases.build`: `nvm install 24 && nvm use 24`, `npm ci`,
     `npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID`;
@@ -684,10 +688,10 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - `uploadDemoFolder`: uploads the folder under `v/<id>/demo/`;
   - `deleteKeys`: batch delete.
 - [ ] T073 [P] [US4] Implement `tools/ingest/aws/content-table.ts`:
-  - `findBySlug(slug)` queries the `bySlug` GSI;
+  - `findBySlug(slug)` looks the slug up in a projected `Scan` (`id`, `slug`), read once per run. There's no slug GSI to query: it would be public through the API (T017);
   - `putContent(record, existing?)` writes all [data-model](./data-model.md#entity-content)
     fields plus the Amplify attributes `id`, `__typename: 'Content'`, `createdAt`, `updatedAt`;
-  - for an existing item, it keeps `id`, `downloadCount`, and `publishedAt`;
+  - for an existing item, it keeps `id`, `downloadCount`, and `publishedAt`; it sets `publishedSlug` on published items and removes it from drafts;
   - for a draft, it omits `publishedAt` entirely (sparse index).
 - [ ] T074 [P] [US4] Implement `tools/ingest/report/report.ts`, which writes `ingest-report.json`
   in the [data-model shape](./data-model.md#entity-import-report-local-file) plus a console summary,
@@ -881,7 +885,7 @@ goes up by one. Unknown slugs show not-found (quickstart V6, V7).
     (research R9).
 - [ ] T096 [P] [US3] Add `getBySlug(slug)` and `requestDownloadUrl(contentId)` to
   `src/lib/data/content.ts`:
-  - `getBySlug` uses `listContentBySlug` and returns the first item, or `null` when it's missing
+  - `getBySlug` uses `listContentBySlug(publishedSlug)` and returns the first item, or `null` when it's missing
     or not `PUBLISHED`. If there's more than one match, it logs a warning;
   - `requestDownloadUrl` maps GraphQL `errors[].errorType` to a typed error.
   - **Progress (beta preview):** `getBySlug` and `requestDownloadUrl` exist, backed by the demo catalog (downloads return the `BetaPreview` error). Still to do: AppSync and the `errorType` mapping.

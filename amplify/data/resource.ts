@@ -6,6 +6,10 @@ import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
  * Signed-in users can only read, and only through the two index queries: the model's default
  * `getContent`/`listContents` queries would return drafts, and every write comes from ingest or the
  * download function, so all generated operations are disabled.
+ *
+ * Both indexes are sparse, keyed on attributes that only published items carry, so neither query can
+ * return a draft. Amplify generates a public query for every index, so there's deliberately no index
+ * on `slug` itself; ingest checks slug uniqueness against the table directly.
  */
 const schema = a.schema({
   // Row order, which is also the display order (FR-007). Kept in step with `src/lib/content-types.ts`
@@ -17,6 +21,8 @@ const schema = a.schema({
   Content: a
     .model({
       slug: a.string().required(),
+      // Equal to `slug` on published items and absent on drafts: the key of the sparse slug index.
+      publishedSlug: a.string(),
       title: a.string().required(),
       type: a.ref("ContentType").required(),
       status: a.ref("ContentStatus").required(),
@@ -43,7 +49,7 @@ const schema = a.schema({
       downloadCount: a.integer().required(),
     })
     .secondaryIndexes((index) => [
-      index("slug").queryField("listContentBySlug"),
+      index("publishedSlug").queryField("listContentBySlug"),
       index("type").sortKeys(["publishedAt"]).queryField("listContentByTypeAndPublishedAt"),
     ])
     .disableOperations(["mutations", "subscriptions", "queries"])
