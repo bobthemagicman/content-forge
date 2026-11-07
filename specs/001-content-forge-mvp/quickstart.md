@@ -28,9 +28,10 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
    - It writes the private key to SSM `/content-forge/master/cloudfront/private-key` (SecureString).
    - It writes the public key to `amplify/custom/assets-cdn/keys/master.public-key.pem`. Commit that
      file. Public keys aren't secret.
-3. **Google OAuth client**: Internal; authorized redirect URI
-   `https://<cognito-domain>/oauth2/idpresponse` (the Cognito domain appears after the first
-   deploy; update it then).
+3. **Google OAuth client**: a Web application client, consent screen Internal; authorized
+   redirect URI `https://<cognito-domain>/oauth2/idpresponse` (the Cognito domain appears after the
+   first deploy; update it then). Cognito registers it as the OIDC provider `GoogleWorkspace`
+   (research R3), which needs nothing extra on Google's side.
 4. **Amplify app**: connect the GitHub repo `bobthemagicman/content-forge` in `us-west-2`. Set:
    - secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`;
    - env vars `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget
@@ -121,7 +122,7 @@ Run against `https://content.example.com` (or a sandbox URL) after step 4.
 | # | Scenario | Steps | Expected | Proves |
 |---|---|---|---|---|
 | V1 | Landing hides content | Open `/` in a private window | Branding + "Sign in with Google". No thumbnails or item data in DOM or network | US1-1, FR-003 |
-| V2 | Allowed sign-in | Sign in with an `@example.com` account | Arrive at `/browse/`. Header shows name/avatar | US1-2, FR-014 |
+| V2 | Allowed sign-in | Sign in with an `@example.com` account, then look the user up in the Cognito console | Arrive at `/browse/`. Header shows name/avatar. The user has `custom:hd = example.com` | US1-2, FR-014, R3 |
 | V3 | Personal account rejected | Sign in with a personal Gmail | Back on `/` with "authorized accounts only" | US1-3, FR-001/002, SC-002 |
 | V4 | Direct access denied | Signed out: `curl -I https://assets.example.com/v/<id>/thumb-320.<hash>.webp`, replay an expired download URL, and POST a `listContentByTypeAndPublishedAt` query to the AppSync URL with no token | `403` for the assets, `401` from AppSync | US1-6, FR-005, SC-002 |
 | V5 | Rows | On `/browse/`, Tab into a row and use arrow keys and the next button | One row per non-empty type in the fixed order. Keyboard moves card to card | US2, FR-007–FR-011 |

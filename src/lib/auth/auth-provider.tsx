@@ -1,6 +1,13 @@
 "use client";
 
 import { fetchAuthSession, signOut as amplifySignOut, signInWithRedirect } from "aws-amplify/auth";
+
+/**
+ * Google Workspace is a Cognito OIDC provider, so it's named, not the built-in `"Google"` (research
+ * R3). Must match `GOOGLE_PROVIDER_NAME` in `amplify/config.ts`; tests/component/auth-provider.test.tsx
+ * checks.
+ */
+export const GOOGLE_PROVIDER_NAME = "GoogleWorkspace";
 import { Hub } from "aws-amplify/utils";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -66,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(() => {
     configureAmplify();
-    signInWithRedirect({ provider: "Google" }).catch((error: unknown) => {
+    signInWithRedirect({ provider: { custom: GOOGLE_PROVIDER_NAME } }).catch((error: unknown) => {
       if (error instanceof Error && error.name === "UserAlreadyAuthenticatedException") router.replace("/browse/");
       else router.replace("/?error=signin");
     });

@@ -59,12 +59,18 @@ they're the first tasks of implementation.
 ## R3. Authentication: Cognito + Google Workspace
 
 - **Decision**:
-  - `defineAuth` with `externalProviders.google` (`clientId`/`clientSecret` from Amplify
-    `secret()`), scopes `openid email profile`, and `attributeMapping` for email, name, picture.
+  - `defineAuth` with Google as an **OIDC provider** named `GoogleWorkspace` (issuer
+    `https://accounts.google.com`, `clientId`/`clientSecret` from Amplify `secret()`), scopes
+    `openid email profile`, and `attributeMapping` for email, `email_verified`, name, picture, and
+    Google's hosted-domain claim `hd` → custom attribute `custom:hd`. The app signs in with
+    `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })`.
   - Callback URL `https://content.example.com/auth/callback/` plus a localhost equivalent for
     sandboxes. Logout URL `/`.
-  - A `preSignUp` trigger (`amplify/auth/pre-sign-up/`) rejects any email that doesn't end in
-    `@example.com`, for every trigger source including `PreSignUp_ExternalProvider`.
+  - A `preSignUp` trigger (`amplify/auth/pre-sign-up/`) admits only `PreSignUp_ExternalProvider`
+    sign-ups whose `custom:hd` is `example.com`, whose email ends in `@example.com`, and whose
+    email isn't unverified. Every other trigger source is refused.
+  - The session function (R7) repeats the `custom:hd` check on every asset session and demo launch,
+    so it also covers sign-ins after the first: Cognito rewrites mapped attributes each time.
   - The Google OAuth consent screen is set to **Internal** (defense in depth).
   - Self-service sign-up is turned off (`allowAdminCreateUserOnly: true` through a CDK override), and
     the UI only calls `signInWithRedirect({ provider: 'Google' })`.
@@ -73,11 +79,20 @@ they're the first tasks of implementation.
 - **Rationale**:
   - Amplify's documented email-domain-filtering pattern is a pre-sign-up trigger, which runs server
     side (Principle II).
-  - Google's `hd` parameter can't reliably be passed through the Cognito Hosted UI, so the
-    Internal consent screen plus the trigger replace it.
+  - Google's guidance is to check the `hd` claim, not the email domain alone: a consumer Google
+    account can use an address in a Workspace domain, and only Workspace accounts carry `hd`.
+  - Cognito's built-in Google provider reads Google's People API, which has no `hd` field. For OIDC
+    providers, Cognito validates Google's ID token (signature, issuer, audience, expiry) and maps
+    claims from it and from the userinfo response, so `hd` can be mapped. An account without it
+    gets no `custom:hd`, and every check fails closed.
+  - The `hd` **request parameter** is only a hint to Google's account picker, and can't reliably be
+    passed through the Cognito Hosted UI, so it's not relied on. The Internal consent screen stays
+    as a further layer.
   - A trigger error makes Cognito redirect to the callback with `error_description`, which the
     callback page maps to the "authorized accounts only" message.
-- **Verify in spike**: that `allowAdminCreateUserOnly` doesn't block first-time federated
+- **Verify in spike**: that a Workspace account's first sign-in maps `custom:hd` (check the user's
+  attributes in the user pool), and that a personal Gmail account is refused. Also that
+  `allowAdminCreateUserOnly` doesn't block first-time federated
   sign-in. If it does, leave self-sign-up on. The pre-sign-up trigger still enforces the domain, and
   no password UI is exposed.
 - **Alternatives considered**:

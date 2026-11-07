@@ -8,6 +8,13 @@ export const ALLOWED_EMAIL_DOMAIN = (process.env.ALLOWED_EMAIL_DOMAIN ?? "exampl
 /** The production app origin, `https://content.<domain>` (research R3). */
 export const APP_ORIGIN = (process.env.APP_ORIGIN ?? "https://content.example.com").replace(/\/$/, "");
 
+/**
+ * The Cognito identity provider name for Google Workspace (an OIDC provider, research R3). The app
+ * passes the same name to `signInWithRedirect` (`src/lib/auth/auth-provider.tsx`); a test keeps
+ * the two in step.
+ */
+export const GOOGLE_PROVIDER_NAME = "GoogleWorkspace";
+
 /** Where `next dev` runs in a personal sandbox (research R19). */
 export const LOCAL_ORIGIN = "http://localhost:3000";
 

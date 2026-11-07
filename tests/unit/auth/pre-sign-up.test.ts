@@ -4,10 +4,14 @@ import { handler } from "../../../amplify/auth/pre-sign-up/handler";
 
 type TriggerSource = PreSignUpTriggerEvent["triggerSource"];
 
-function event(email: string | undefined, triggerSource: TriggerSource = "PreSignUp_ExternalProvider") {
+function event(
+  email: string | undefined,
+  triggerSource: TriggerSource = "PreSignUp_ExternalProvider",
+  extra: Record<string, string> = { "custom:hd": "example.com", email_verified: "true" },
+) {
   return {
     triggerSource,
-    request: { userAttributes: email === undefined ? {} : { email } },
+    request: { userAttributes: { ...extra, ...(email === undefined ? {} : { email }) } },
     response: { autoConfirmUser: false, autoVerifyEmail: false, autoVerifyPhone: false },
   } as unknown as PreSignUpTriggerEvent;
 }
@@ -35,13 +39,40 @@ describe("pre-sign-up trigger", () => {
     await expect(run(event(undefined))).rejects.toThrow("ONLY_ALLOWED_DOMAIN");
   });
 
-  it.each<TriggerSource>(["PreSignUp_ExternalProvider", "PreSignUp_AdminCreateUser", "PreSignUp_SignUp"])(
-    "applies to %s",
+  it.each<TriggerSource>(["PreSignUp_AdminCreateUser", "PreSignUp_SignUp"])(
+    "refuses %s: accounts come only from Google sign-in",
     async (source) => {
-      await expect(run(event("user@gmail.com", source))).rejects.toThrow("ONLY_ALLOWED_DOMAIN");
-      await expect(run(event("user@example.com", source))).resolves.toBeDefined();
+      await expect(run(event("user@example.com", source))).rejects.toThrow("ONLY_ALLOWED_DOMAIN");
     },
   );
+
+  describe("Google's hosted-domain claim (custom:hd)", () => {
+    it("accepts it in any case", async () => {
+      const e = event("user@example.com", "PreSignUp_ExternalProvider", { "custom:hd": "Example.COM" });
+      await expect(run(e)).resolves.toBe(e);
+    });
+
+    it.each([
+      ["missing (a consumer Google account using a company address)", {}],
+      ["another Workspace", { "custom:hd": "other.com" }],
+      ["a subdomain", { "custom:hd": "sub.example.com" }],
+      ["a lookalike", { "custom:hd": "example.com.evil.com" }],
+      ["empty", { "custom:hd": "" }],
+    ])("rejects it when %s", async (_, extra) => {
+      await expect(run(event("user@example.com", "PreSignUp_ExternalProvider", extra))).rejects.toThrow(
+        "ONLY_ALLOWED_DOMAIN",
+      );
+    });
+
+    it("still requires the email to be in the domain", async () => {
+      await expect(run(event("user@other.com"))).rejects.toThrow("ONLY_ALLOWED_DOMAIN");
+    });
+  });
+
+  it("rejects an unverified email", async () => {
+    const e = event("user@example.com", "PreSignUp_ExternalProvider", { "custom:hd": "example.com", email_verified: "false" });
+    await expect(run(e)).rejects.toThrow("ONLY_ALLOWED_DOMAIN");
+  });
 
   it("fails closed when ALLOW_DOMAIN is unset", async () => {
     vi.stubEnv("ALLOW_DOMAIN", "");
