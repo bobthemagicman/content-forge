@@ -23,3 +23,14 @@ jobs:
       - run: npm test
       # The licensed Aeonik files are absent here; prebuild substitutes Lato (T029).
       - run: npm run build
+      # E2E builds its own export (DEMO_MODE off, mocked backend; see playwright.config.ts).
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

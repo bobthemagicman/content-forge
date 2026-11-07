@@ -20,8 +20,8 @@
     },
     "oauth": {
       "identity_providers": ["GOOGLE"],
-      "redirect_sign_in_uri": ["http://localhost:3000/auth/callback/", "http://localhost:4173/auth/callback/"],
-      "redirect_sign_out_uri": ["http://localhost:3000/", "http://localhost:4173/"],
+      "redirect_sign_in_uri": ["http://localhost:4173/auth/callback/", "http://localhost:3000/auth/callback/"],
+      "redirect_sign_out_uri": ["http://localhost:4173/", "http://localhost:3000/"],
       "response_type": "code",
       "scopes": ["openid", "email", "profile"],
       "domain": "e2e-test.auth.us-west-2.amazoncognito.com"
