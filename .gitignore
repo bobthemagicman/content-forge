@@ -66,6 +66,8 @@ next-env.d.ts
 # amplify gen 2 (sandbox state and generated, per-environment config)
 .amplify/
 amplify_outputs*
+# ...except the fake-environment fixture CI and the beta preview build against (T041)
+!tests/e2e/fixtures/amplify_outputs.e2e.json
 amplifyconfiguration*
 
 # aws cdk (infra/edge-cert and any other CDK app)
