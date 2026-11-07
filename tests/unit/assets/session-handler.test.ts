@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { FetchError, JwksNotAvailableInCacheError, JwtExpiredError, KidNotFoundInJwksError } from "aws-jwt-verify/error";
@@ -10,6 +11,7 @@ const verify = vi.fn();
 vi.mock("aws-jwt-verify", () => ({ CognitoJwtVerifier: { create: () => ({ verify }) } }));
 
 const ssm = mockClient(SSMClient);
+const dynamodb = mockClient(DynamoDBClient);
 const { privateKey, publicKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { type: "pkcs8", format: "pem" },
@@ -18,6 +20,8 @@ const { privateKey, publicKey } = generateKeyPairSync("rsa", {
 
 const APP = "https://content.example.com";
 const HOST = "assets.example.com";
+const DEMOS = "d111111abcdef8.cloudfront.net";
+const ITEM_ID = "3f1c2b8e-9d4a-4c6b-8e2f-1a2b3c4d5e6f";
 const PARAMS: Record<string, string> = {
   "/content-forge/test/assets/domain": HOST,
   "/content-forge/test/cloudfront/key-pair-id": "K2TESTKEYPAIR",
@@ -34,6 +38,8 @@ async function loadHandler(cookieMode = "same-site") {
     ASSETS_DOMAIN_PARAM: "/content-forge/test/assets/domain",
     KEY_PAIR_ID_PARAM: "/content-forge/test/cloudfront/key-pair-id",
     PRIVATE_KEY_PARAM: "/content-forge/test/cloudfront/private-key",
+    DEMOS_DOMAIN: DEMOS,
+    CONTENT_TABLE: "Content-test",
   });
   vi.resetModules();
   return (await import("../../../amplify/custom/assets-cdn/session-handler")).handler;
@@ -67,6 +73,10 @@ const body = (result: APIGatewayProxyStructuredResultV2) => JSON.parse(String(re
 
 beforeEach(() => {
   ssm.reset();
+  dynamodb.reset();
+  dynamodb.on(GetItemCommand).resolves({
+    Item: { status: { S: "PUBLISHED" }, demoEntryPath: { S: "site files/index.html" } },
+  });
   ssm.on(GetParameterCommand).callsFake(({ Name }: { Name: string }) => ({ Parameter: { Value: PARAMS[Name] } }));
   verify.mockReset().mockResolvedValue({ email: "ada@example.com", email_verified: true });
   vi.useFakeTimers({ now: new Date("2026-11-06T12:00:00Z"), toFake: ["Date"] });
@@ -275,5 +285,103 @@ describe("other requests", () => {
 
   it("refuses to start with an unknown cookie mode", async () => {
     await expect(loadHandler("lax")).rejects.toThrow(/COOKIE_MODE/);
+  });
+});
+
+describe("GET /_session/demo/<id>", () => {
+  const demoPath = `/_session/demo/${ITEM_ID}`;
+
+  it("returns a 12-hour launch link on the demo host, signed for that demo only", async () => {
+    const handler = await loadHandler();
+    const result = await handler(withToken(demoPath));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.cookies).toBeUndefined();
+    expect(result.headers).toMatchObject({ "Access-Control-Allow-Origin": APP, "Cache-Control": "no-store" });
+    const { url, expiresAt } = body(result);
+    expect(expiresAt).toBe("2026-11-07T00:00:00.000Z");
+
+    const link = new URL(url);
+    expect(link.origin).toBe(`https://${DEMOS}`);
+    expect(link.pathname).toBe(`/_launch/${ITEM_ID}/site%20files/index.html`);
+    expect([...link.searchParams.keys()]).toEqual(["p", "s", "k"]);
+    expect(link.searchParams.get("k")).toBe("K2TESTKEYPAIR");
+
+    const raw = (name: string) => new RegExp(`[?&]${name}=([^&]*)`).exec(url)![1]!;
+    expect(raw("p")).toMatch(/^[A-Za-z0-9_~-]+$/);
+    const policy = fromCloudFrontBase64(raw("p"));
+    expect(JSON.parse(policy.toString())).toEqual({
+      Statement: [
+        {
+          Resource: `https://${DEMOS}/${ITEM_ID}/*`,
+          Condition: { DateLessThan: { "AWS:EpochTime": Date.parse("2026-11-07T00:00:00Z") / 1000 } },
+        },
+      ],
+    });
+    const signature = fromCloudFrontBase64(raw("s"));
+    expect(createVerify("RSA-SHA1").update(policy).verify(publicKey, signature)).toBe(true);
+  });
+
+  it("reads only the item's status and entry path", async () => {
+    const handler = await loadHandler();
+    await handler(withToken(demoPath));
+    expect(dynamodb.commandCalls(GetItemCommand)[0]!.args[0].input).toEqual({
+      TableName: "Content-test",
+      Key: { id: { S: ITEM_ID } },
+      ProjectionExpression: "#status, demoEntryPath",
+      ExpressionAttributeNames: { "#status": "status" },
+    });
+  });
+
+  it.each([
+    ["a missing item", undefined],
+    ["a draft", { status: { S: "DRAFT" }, demoEntryPath: { S: "index.html" } }],
+    ["an item without a demo", { status: { S: "PUBLISHED" } }],
+  ])("answers 404 for %s", async (_, Item) => {
+    dynamodb.on(GetItemCommand).resolves({ Item });
+    const handler = await loadHandler();
+    const result = await handler(withToken(demoPath));
+    expect(result.statusCode).toBe(404);
+    expect(body(result)).toEqual({ error: "not_found" });
+  });
+
+  it.each(["../secret.html", "/index.html", "a//b.html", "a\\b.html", "./index.html"])(
+    "refuses to link the stored entry path %s",
+    async (entry) => {
+      dynamodb.on(GetItemCommand).resolves({ Item: { status: { S: "PUBLISHED" }, demoEntryPath: { S: entry } } });
+      const handler = await loadHandler();
+      const result = await handler(withToken(demoPath));
+      expect(result.statusCode).toBe(500);
+    },
+  );
+
+  it("applies the same checks as /_session before reading the catalog", async () => {
+    const handler = await loadHandler();
+    expect((await handler(request(demoPath))).statusCode).toBe(401);
+    verify.mockResolvedValueOnce({ email: "eve@example.org", email_verified: true });
+    expect((await handler(withToken(demoPath))).statusCode).toBe(403);
+    const elsewhere = request(demoPath, { headers: { origin: "https://evil.example", "x-id-token": "t" } });
+    expect((await handler(elsewhere)).statusCode).toBe(403);
+    expect(dynamodb.commandCalls(GetItemCommand)).toHaveLength(0);
+  });
+
+  it("answers 500 when the catalog can't be read", async () => {
+    dynamodb.on(GetItemCommand).rejects(new Error("throttled"));
+    const handler = await loadHandler();
+    expect((await handler(withToken(demoPath))).statusCode).toBe(500);
+  });
+
+  it("answers 404 for an id that isn't a plain identifier", async () => {
+    const handler = await loadHandler();
+    expect((await handler(withToken("/_session/demo/a%2Fb"))).statusCode).toBe(404);
+    expect((await handler(withToken("/_session/demo/"))).statusCode).toBe(404);
+    expect(dynamodb.commandCalls(GetItemCommand)).toHaveLength(0);
+  });
+
+  it("answers the CORS preflight", async () => {
+    const handler = await loadHandler();
+    const result = await handler(request(demoPath, { method: "OPTIONS" }));
+    expect(result.statusCode).toBe(204);
+    expect(result.headers).toMatchObject({ "Access-Control-Allow-Headers": "X-Id-Token" });
   });
 });

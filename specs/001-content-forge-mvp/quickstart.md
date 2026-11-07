@@ -81,7 +81,8 @@ Sandboxes use their own bucket, table, Cognito pool, and signing keys. Commit th
 
 Sandbox assets are served from the distribution's `*.cloudfront.net` domain with cross-site cookies,
 and there's no budget or custom domain (research R19). **Use Chrome for local development.**
-Browsers that block third-party cookies won't show sandbox previews or demos.
+Browsers that block third-party cookies won't show sandbox previews. Demos work in every browser,
+because their cookies are set on the demo host itself (research R20).
 
 ## 4. Load sample content
 
@@ -126,8 +127,8 @@ Run against `https://content.example.com` (or a sandbox URL) after step 4.
 | V5 | Rows | On `/browse/`, Tab into a row and use arrow keys and the next button | One row per non-empty type in the fixed order. Keyboard moves card to card | US2, FR-007–FR-011 |
 | V6 | Detail + download | Open a card, then Download. Repeat with the largest archive in the library (multi-GB) | Detail facts shown. Download starts within 1 s and saves with its original name. The large file completes and its checksum matches the original. `downloadCount` +1 each time | US3, FR-015–FR-020, SC-001, SC-005 |
 | V7 | Link expiry | Copy the signed URL from devtools and retry after 6 min | `403` | FR-018, SC-005 |
-| V8 | Live demo | On the template, select Live Demo | Template renders with CSS/JS/images in a new tab on `assets.` | US5, FR-026 |
-| V9 | Demo isolation | In the demo tab's console: `localStorage.length`, then `fetch('https://content.example.com/')` | No app tokens visible. Cross-origin read is blocked | FR-027 |
+| V8 | Live demo | On the template, select Live Demo | Template renders with CSS/JS/images in a new tab on the demo host (`*.cloudfront.net`, not `assets.`) | US5, FR-026 |
+| V9 | Demo isolation | In the demo tab's console: `localStorage.length`, `window.opener`, then `fetch('https://content.example.com/')`; then open the demo URL without the launch link in a private window | No app tokens visible, `opener` is `null`, cross-site read blocked; the direct URL gets `403` | FR-027, FR-005 |
 | V10 | Previews | Open the PPT, video, and texture items | Slide gallery (≤12), playable ≤30 s clip, tiled texture | US6, FR-024 |
 | V11 | Re-import | Rerun step 4 without `--dry-run` | `skipped` for unchanged items. Same `id`s. No duplicates in rows | FR-037, SC-009 |
 | V12 | Sign-out | Header → Sign out, then reload `/browse/` and an asset URL | Redirect to `/`. Asset returns `403` | FR-006 |

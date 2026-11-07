@@ -19,9 +19,11 @@ the owner's domain throughout.
   - **Amplify Data** (AppSync + DynamoDB) for the read-only catalog, with a `getDownloadUrl` Lambda
     query;
   - a custom CDK **`AssetsCdn`** construct: a private S3 bucket behind CloudFront at
-    `assets.example.com`.
-- **Asset access**: previews and live demos use signed cookies, which a session Lambda issues after
-  verifying the Cognito token. Archives use 5-minute signed URLs.
+    `assets.example.com`, plus a second distribution for template demos on its own
+    `*.cloudfront.net` host, a separate site from the owner's domain (R20).
+- **Asset access**: previews use signed cookies, which a session Lambda issues after verifying the
+  Cognito token. Demos get per-demo signed cookies through a launch link from the same Lambda.
+  Archives use 5-minute signed URLs.
 - **Ingest**: a local Node CLI bulk-imports the library. It generates every thumbnail and preview on
   the owner's machine (Playwright, LibreOffice + poppler, ffmpeg, sharp), then writes straight to S3
   and DynamoDB.
@@ -89,8 +91,8 @@ block the plan.
 | # | Principle | Gate | Pre-research | Post-design |
 |---|---|---|---|---|
 | I | Cost Discipline | No always-on compute, NAT, or VPC Lambdas. A cost estimate for each billable resource. Budget alert in code. Heavy processing ahead of time. Bounded logs | ✅ | ✅ The R17 estimate puts every item under $1 except S3 storage, which the spec excludes. The budget is in `AssetsCdn` (production only, R19). All three Lambdas set 14-day log retention, checked by tests. All previews are generated locally |
-| II | Server-Enforced Access & Isolation | Domain check in the backend. Every read, preview, demo, and download authenticated by the backend/CDN. No data or secrets in bundles. Private storage with OAC. Links ≤ 5 min. Demos on a separate origin. Managed secrets. Archive guards | ✅ | ✅ Pre-sign-up trigger, session Lambda, and download function all check the domain. AppSync uses user-pool auth. CloudFront trusted key groups cover `/v/*` and `/a/*`. The function URL uses OAC + IAM. The private key is in SSM. Demos are on `assets.`. Ingest limits are in the [ingest contract](./contracts/ingest-cli.md) |
-| III | Static Front End, Serverless Backend, Everything as Code | `output: 'export'`, App Router only, client calls to the Amplify backend, IaC for everything, bundled Next.js docs read first | ✅ | ✅ Static export (R1). Infrastructure is the `amplify/` backend plus `infra/edge-cert`. Documented bootstrap exceptions: the SSM SecureString, the Google OAuth client, and connecting the Amplify app ([quickstart](./quickstart.md) §2) |
+| II | Server-Enforced Access & Isolation | Domain check in the backend. Every read, preview, demo, and download authenticated by the backend/CDN. No data or secrets in bundles. Private storage with OAC. Links ≤ 5 min. Demos on a separate site. Managed secrets. Archive guards | ✅ | ✅ Pre-sign-up trigger, session Lambda, and download function all check the domain. AppSync uses user-pool auth. CloudFront trusted key groups cover `/v/*`, `/a/*`, and every demo. The function URL uses OAC + IAM. The private key is in SSM. Demos are on the demo distribution's `*.cloudfront.net` host, a separate site, and a drafted item has no launch link (R20, constitution 1.1.0). Ingest limits are in the [ingest contract](./contracts/ingest-cli.md) |
+| III | Static Front End, Serverless Backend, Everything as Code | `output: 'export'`, App Router only, client calls to the Amplify backend, IaC for everything, bundled Next.js docs read first | ✅ | ✅ Static export (R1). Infrastructure is the `amplify/` backend plus `infra/edge-cert`. Documented bootstrap exceptions: the SSM SecureString, the Google OAuth client, and connecting the Amplify app ([quickstart](./quickstart.md) §2). Adding an item, demo included, is data only: no per-item infrastructure (R20) |
 | IV | Accessible by Default | WCAG 2.1 AA, React Aria, axe with 0 violations in CI, contrast, reduced motion, alt text | ✅ | ✅ `GridList` rows (R12), the [UI accessibility contract](./contracts/ui-routes.md#accessibility-contract-principle-iv), axe in E2E (R15) |
 | V | Tested Increments | Tests for every story. Unit tests for security rejection paths. CI blocks on failure. Stories independently testable | ✅ | ✅ The R15 matrix covers each layer. A mocked-backend E2E makes every browser story testable in CI, and the ingest E2E runs the real CLI pipeline for US4 (constitution v1.0.1) |
 | VI | Simplicity & Agent-Legible Code | YAGNI, strict TypeScript, module boundaries, new dependencies justified, `AGENTS.md` kept current | ✅ | ✅ No state or CLI-framework libraries. Dependencies justified below. `AGENTS.md` update is a planned task |
@@ -106,12 +108,12 @@ are new dependencies (Principle VI), which are listed in Complexity Tracking.
 specs/001-content-forge-mvp/
 ├── spec.md              # Feature specification
 ├── plan.md              # This file
-├── research.md          # Phase 0: decisions R1–R17
+├── research.md          # Phase 0: decisions R1–R20
 ├── data-model.md        # Phase 1: Content, DownloadEvent, storage layout
 ├── quickstart.md        # Phase 1: setup + validation scenarios V1–V14
 ├── contracts/
 │   ├── data-api.md      # AppSync operations + custom outputs
-│   ├── assets-cdn.md    # CDN behaviors + /_session endpoint
+│   ├── assets-cdn.md    # CDN behaviors, demo host, /_session endpoints
 │   ├── ingest-cli.md    # CLI commands, manifest schema, detection, exit codes
 │   └── ui-routes.md     # Routes, page states, action rules, a11y contract
 ├── checklists/
@@ -130,8 +132,9 @@ amplify/                                  # Amplify Gen 2 backend (CDK under the
 ├── data/resource.ts                      # Content model, indexes, getDownloadUrl query
 ├── functions/get-download-url/{resource,handler}.ts
 ├── custom/assets-cdn/
-│   ├── construct.ts                      # bucket, CloudFront, key group, DownloadEvents, budget
-│   ├── session-handler.ts                # /_session + /_session/signout
+│   ├── construct.ts                      # bucket, both distributions, key group, DownloadEvents, budget
+│   ├── session-handler.ts                # /_session, /_session/signout, /_session/demo/<id>
+│   ├── demo-launch.js                    # CloudFront Function: demo launch link → cookies
 │   └── keys/<env>.public-key.pem         # one per environment (master, sandbox-<user>)
 ├── package.json
 └── tsconfig.json

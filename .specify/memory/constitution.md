@@ -1,6 +1,36 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.0.4 → 1.1.0
+Bump rationale: MINOR. Materially expanded guidance, approved by the owner on 2026-11-07:
+  - Principle II: demos must run on a separate site, not just a separate origin. A demo on
+    `assets.example.com` could set cookies on the owner's domain, send same-site requests to its
+    other hosts, and phish on a trusted name (research R20).
+  - Principle III: adding content, demos included, must be automatable, with no per-item
+    infrastructure or console steps. The owner's rule: every design choice keeps per-type demo
+    setup automatable.
+
+Modified principles:
+  - II. Server-Enforced Access & Asset Isolation: demos on a separate site
+  - III. Static Front End, Serverless Backend, Everything as Code: automatable content setup
+Modified sections:
+  - Technology & Platform Constraints: Domains (demos on the demo distribution's `*.cloudfront.net`
+    host)
+
+Added sections: none
+Removed sections: none
+
+Dependent artifacts: specs/001-content-forge-mvp/ (research R20, contracts/assets-cdn.md,
+data-model.md, spec.md assumptions, plan.md, quickstart.md, tasks.md) and
+docs/requirements/content-forge-mvp.md (FR-6, architecture), updated in the same change.
+
+Deferred TODOs: none
+
+History:
+  - 1.0.4 (2026-10-28): brand color roles aligned with the owner's brand standards.
+
+Previous report (1.0.4)
+-----------------------
 Version change: 1.0.3 → 1.0.4
 Bump rationale: PATCH. Brand color roles aligned with the owner's brand standards (Confluence:
 Corporate Brand & Marketing Standards): lime is the primary action color, magenta `#D92B83` the
@@ -68,8 +98,9 @@ The catalog holds licensed, paid material that only the owner and the users they
 - Storage MUST be private (block all public access). It is reachable only through the CDN with
   origin access control, and through short-lived signed URLs or cookies. Download links MUST
   expire within 5 minutes.
-- Third-party template code (live demos) MUST run on an origin separate from the application,
-  and MUST NOT be able to read app tokens or call app APIs as the user.
+- Third-party template code (live demos) MUST run on a **site** separate from the application and
+  from the owner's domain (a different registrable domain, not just another subdomain), and MUST
+  NOT be able to read app tokens or call app APIs as the user.
 - Secrets (OAuth client secret, CDN signing keys) MUST live in a managed secret store and MUST
   NOT be committed. Write access to the catalog is limited to the owner's identity and to
   purpose-built functions, with least-privilege IAM.
@@ -89,6 +120,9 @@ untrusted marketplace code in the browser is an obvious attack path.
 - All cloud infrastructure MUST be defined in code: the Amplify Gen 2 `amplify/` backend, with
   AWS CDK for custom resources. Changes made by hand in the console are prohibited, apart from
   one-time bootstrap steps documented in the repo.
+- Adding content MUST be automatable end to end, demos included, so that setting up each content
+  type's demos can be automated: a new item is data (files under its prefix and catalog fields),
+  never per-item infrastructure, DNS, certificates, or console steps.
 - Contributors MUST read the relevant guide in `node_modules/next/dist/docs/` before writing
   Next.js code, because this Next.js version has breaking changes (see `AGENTS.md`).
 
@@ -154,7 +188,8 @@ development is most reliable.
   assets, budgets). Region: `us-west-2`. CloudFront certificates live in `us-east-1`.
 - **Data**: DynamoDB for the catalog. Any future relational store (Aurora Serverless v2,
   MySQL-compatible) MUST be reached via the RDS Data API, without VPC-attached compute.
-- **Domains**: App at `content.example.com`. Assets/demos at `assets.example.com`.
+- **Domains**: App at `content.example.com`. Previews and downloads at `assets.example.com`.
+  Demos on the demo distribution's own `*.cloudfront.net` host, never under the owner's domain.
   DNS in Route 53. `example.com` is a placeholder for the owner's domain, set per deployment.
 - **Branding**: Content Forge identity, following the owner's brand standards: dark theme
   (`#111` background), lime `#AFFC41` primary actions, magenta `#D92B83` secondary actions, amber
@@ -193,4 +228,4 @@ development is most reliable.
   phase (e.g., usage tracking).
 - Use `AGENTS.md` for day-to-day development guidance.
 
-**Version**: 1.0.4 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-28
+**Version**: 1.1.0 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-11-07

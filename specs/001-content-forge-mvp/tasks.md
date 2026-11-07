@@ -66,7 +66,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
 
   Run `npx playwright install chromium firefox webkit`. Every dependency here is justified in
   plan.md Complexity Tracking (Principle VI).
-  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. The E2E work added `@playwright/test` and `@axe-core/playwright` (the browsers install with `npx playwright install`). The backend work added `aws-jwt-verify`, `@aws-sdk/cloudfront-signer`, `@aws-sdk/client-ssm`, `aws-sdk-client-mock`, and `esbuild` (CDK bundles Lambda code with it; without a top-level copy it falls back to Docker). Still to do: the DynamoDB and S3 SDK packages (with T093 and US4) and the ingest packages. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. The committed lockfile is a fresh install plus the nested entries a second install adds, plus hand-added nested `@opentelemetry/core@2.0.0` and `semver` entries under the two Amplify constructs, which bundle packages whose dependencies they don't bundle. npm 11.19 also prunes those nested entries, and esbuild's optional entries, on an incremental install; restore any that disappear from the previous lockfile. npm 11.5 does the same on `npm install <pkg>`: the backend work restored 30 dropped entries (the rolldown and lightningcss bindings and the nested Amplify entries) by copying them back from the previous lockfile. After any dependency change, check that `npm ci` passes with CI's npm version (`npx npm@<version> ci`; newer npm is stricter) and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
+  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. The E2E work added `@playwright/test` and `@axe-core/playwright` (the browsers install with `npx playwright install`). The backend work added `aws-jwt-verify`, `@aws-sdk/cloudfront-signer`, `@aws-sdk/client-ssm`, `@aws-sdk/client-dynamodb` (the demo launch check), `aws-sdk-client-mock`, and `esbuild` (CDK bundles Lambda code with it; without a top-level copy it falls back to Docker). Still to do: `lib-dynamodb` and the S3 SDK packages (with T093 and US4) and the ingest packages. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. The committed lockfile is a fresh install plus the nested entries a second install adds, plus hand-added nested `@opentelemetry/core@2.0.0` and `semver` entries under the two Amplify constructs, which bundle packages whose dependencies they don't bundle. npm 11.19 also prunes those nested entries, and esbuild's optional entries, on an incremental install; restore any that disappear from the previous lockfile. npm 11.5 does the same on `npm install <pkg>`: the backend work restored 30 dropped entries (the rolldown and lightningcss bindings and the nested Amplify entries) by copying them back from the previous lockfile. After any dependency change, check that `npm ci` passes with CI's npm version (`npx npm@<version> ci`; newer npm is stricter) and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
 - [x] T003 [P] Rewrite `next.config.ts` per research R1:
   - add `output: 'export'`, `trailingSlash: true`,
     `images: { loader: 'custom', loaderFile: './src/lib/assets/image-loader.ts' }`;
@@ -240,6 +240,7 @@ that every story needs
   Follow [contracts/assets-cdn.md](./contracts/assets-cdn.md) and research R6.
   - **Done:** the four optional props, plus `budgetAlertEmail` (T019), are required in production. The bucket name is generated (a fixed `content-forge-assets-<env>` could already be taken: S3 names are global) and reported as `custom.assetsBucketName`. The bucket is retained on delete. The distribution also uses `PriceClass_100` (North America and Europe edges, Principle I).
   - **Security review:** every behavior is `https-only` (no redirect) and sends HSTS and `nosniff`. The default behavior also has the trusted key group, so it stays closed even if the deny function were detached.
+  - **Demo host (research R20, 2026-11-07):** demos moved off the asset host to a second `Distribution` on its own `*.cloudfront.net` host in every environment: origin path `/d` on the same bucket, the same key group on the default behavior, and `/_launch/*` answered by the `demo-launch.js` CloudFront Function (per-demo cookies, then a redirect). A bucket policy statement denies it any object outside `d/`. Public prop `demosDistribution` and `demosBaseUrl`.
 - [x] T019 Extend `amplify/custom/assets-cdn/construct.ts`, part 2. Add:
   - DynamoDB table `DownloadEvents`: PK `contentId`, SK `downloadedAtEmail`, on-demand billing, PITR
     off;
@@ -266,6 +267,7 @@ that every story needs
   - **Errors**: `401`/`403`/`500` JSON bodies.
   - **SSM**: read the private key, key-pair ID, and asset host from the parameter names in env and
     cache them per container.
+  - **Demo launch (research R20):** `GET /_session/demo/<id>` runs the same checks as `/_session`, reads the item's `status` and `demoEntryPath` (`GetItem`), answers `404` for a missing item, a draft, or no demo, and otherwise returns a 12-hour launch link signed for `https://<demo host>/<id>/*`.
   - **Done:** the allowed domain comes from env `ALLOW_DOMAIN` (as in pre-sign-up). Unknown paths return `404` and other methods `405`. `email_verified` is checked as boolean or string. **Security review:** cookies are host-only with `Path=/v/` in both modes, so no other host or path receives them, and sign-out no longer reads SSM. A failure to fetch the user pool's signing keys answers `500`, not `401`, so an outage doesn't send users to sign in again.
 - [x] T021 Extend `amplify/custom/assets-cdn/construct.ts`, part 3. Add the session Lambda:
   - a `NodejsFunction` for `session-handler.ts`: `Runtime.NODEJS_24_X`, 256 MB, 5 s timeout,
@@ -277,6 +279,7 @@ that every story needs
   - distribution behavior `/_session*` → `FunctionUrlOrigin.withOriginAccessControl`, with
     `CACHING_DISABLED` and an origin request policy forwarding headers `X-Id-Token` and `Origin`
     (depends on T018–T020).
+  - **Demo launch:** env `DEMOS_DOMAIN` (the demo distribution's domain; no cycle, because the demo distribution doesn't reference the function) and `CONTENT_TABLE`, plus `dynamodb:GetItem` on the catalog table alone. `backend.ts` passes the table as `contentTable`.
   - **Done:** CORS comes from the Lambda alone, not also a response headers policy: it echoes the one exact allowed origin, and a second source would duplicate headers. The function runs on ARM, bundles the AWS SDK (the CloudFront signer isn't in the Lambda runtime), and gets both `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` permissions for CloudFront from CDK.
 - [x] T022 [P] Write unit tests in `tests/unit/assets/session-handler.test.ts`, mocking the verifier
   and SSM with `aws-sdk-client-mock`. Cover:
@@ -619,7 +622,7 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
     reason in the report;
   - assert, per fixture: the detected type; the `a/<id>/<file>` archive upload with its
     `Content-Disposition`; the expected `v/` keys, all sharing one import hash; that thumbnails
-    decode as WebP (`sharp(...).metadata()`); `demo/**` uploads only for the template; and the
+    decode as WebP (`sharp(...).metadata()`); `d/<id>/**` uploads only for the template; and the
     DynamoDB record (`demoEntryPath`, `meta.slideCount === 3`, video `meta.durationSeconds` ≈ 3,
     image dimensions);
   - run it a second time with the first run's state and the mocked `findBySlug` results. Every
@@ -686,8 +689,9 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - `uploadViewable`: correct `ContentType` from an extension map (html, css, js, mjs, json, svg,
     png, jpg, webp, gif, woff, woff2, ttf, mp4, webm), with
     `CacheControl: public, max-age=31536000, immutable` for hashed keys and `max-age=3600` for
-    `demo/**`;
-  - `uploadDemoFolder`: uploads the folder under `v/<id>/demo/`;
+    `d/**`;
+  - `uploadDemoFolder`: uploads the folder under `d/<id>/`, the demo host's prefix (research R20).
+    Every file needs its `ContentType`, because the demo host sends `nosniff`;
   - `deleteKeys`: batch delete.
 - [ ] T073 [P] [US4] Implement `tools/ingest/aws/content-table.ts`:
   - `findBySlug(slug)` looks the slug up in a projected `Scan` (`id`, `slug`), read once per run. There's no slug GSI to query: it would be public through the API (T017);
@@ -707,7 +711,7 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   5. generate previews by type;
   6. if `--dry-run`, stop here and report;
   7. `findBySlug`;
-  8. upload `a/`, then `v/` (plus `demo/` for templates);
+  8. upload `a/`, then `v/` (plus `d/<id>/` for templates);
   9. `putContent`;
   10. delete superseded `v/` keys;
   11. update state;
@@ -942,21 +946,30 @@ working. The demo URL is denied without a session, and demo code can't see app t
   - no `demoEntryPath` plus an `externalDemoUrl` shows Vendor demo;
   - otherwise neither shows;
   - non-template types never show Live Demo.
-- [ ] T102 [P] [US5] Write E2E tests in `tests/e2e/us5-live-demo.spec.ts`: Live Demo opens a popup
-  at `https://assets.e2e.test/v/<id>/demo/<entry>` with `noopener`, the vendor demo link has
+- [ ] T102 [P] [US5] Write E2E tests in `tests/e2e/us5-live-demo.spec.ts`: Live Demo calls the
+  mocked `/_session/demo/<id>`, opens a tab whose `opener` is `null`, and sends it to the returned
+  launch link; an error closes the tab and shows a toast; the vendor demo link has
   `target=_blank` and `rel="noopener noreferrer"`, and the WordPress-type fixture has neither
   button.
 - [ ] T103 [P] [US5] Create `tests/smoke/us5-demo.smoke.ts`. Against the deployed environment:
   - open a demo, then assert the page loads with no failed CSS or JS requests;
   - assert `localStorage.length === 0` on the demo origin;
-  - assert a context with no cookies gets `403` for the same URL.
+  - assert a context with no cookies gets `403` for the same URL;
+  - assert the demo host isn't under the owner's domain, and that a demo's cookies aren't sent to
+    another demo's path.
 - [x] T104 [US5] Add `demoUrl(item)` to `src/lib/assets/asset-url.ts`. It builds
   `<assetsBaseUrl>/v/<id>/demo/<demoEntryPath>`, encodes each path segment, and refuses paths with
-  `..` (FR-034).
+  `..` (FR-034). Beta preview only since research R20: real demos open through launch links (T129).
 - [x] T105 [US5] Add **Live Demo** and **Vendor demo** to `src/components/detail/detail-actions.tsx`
   following the action rules. Live Demo calls `window.open(demoUrl(item), '_blank', 'noopener')`.
   Vendor demo is an external React Aria `Link` with `target="_blank"` and
   `rel="noopener noreferrer"` (FR-026–FR-028).
+- [ ] T129 [US5] Switch Live Demo to launch links (research R20, contracts/assets-cdn.md "Client
+  obligations"), added 2026-11-07. Outside the beta preview, the click handler opens a blank tab
+  synchronously, sets its `opener` to `null`, fetches `<assetsBaseUrl>/_session/demo/<id>` with
+  the ID token, and points the tab at the returned `url`. On an error it closes the tab and shows
+  a toast (`404`: "This demo is no longer available."; `401`: sign in again; otherwise: try
+  again). `demoUrl()` (T104) stays for the beta preview's local demos only. Depends on T020.
 
 **Checkpoint**: Website templates can be evaluated without downloading them.
 

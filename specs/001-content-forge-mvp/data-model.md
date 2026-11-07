@@ -37,7 +37,7 @@ by ingest when it writes directly (R5).
 | `archiveKey` | String | ✔ | `a/<id>/<archiveFileName>` |
 | `archiveFileName` | String | ✔ | Original file name exactly as purchased |
 | `archiveBytes` | Float (bytes) | ✔ | > 0. Float because GraphQL `Int` is 32-bit, which can't hold multi-GB sizes |
-| `demoEntryPath` | String | | Only for `WEBSITE_TEMPLATE`. Relative path under `v/<id>/demo/`, no leading `/`, no `..`. Absent means no hosted demo |
+| `demoEntryPath` | String | | Only for `WEBSITE_TEMPLATE`. Relative path under `d/<id>/`, no leading `/`, no empty, `.` or `..` segments, no `\`. Absent means no hosted demo. Served from the demo host (research R20) |
 | `accentColor` | String | | `^#[0-9A-F]{6}$`. Dominant color of the largest thumbnail, from `sharp().stats().dominant` at ingest, darkened (hue kept) to a relative luminance of at most 0.2 so text over its glow stays AA. Tints the detail page's glow; absent → the UI uses the type accent |
 | `thumbKeys` | AWSJSON | ✔ | `{ "320": "v/<id>/thumb-320.<hash>.webp", "640": …, "1280": … }` |
 | `previewKeys` | [String] | | Ordered gallery images (screenshots, slides, large image) |
@@ -155,15 +155,20 @@ v/<id>/thumb-{320,640,1280}.<hash>.webp      card + responsive thumbnails
 v/<id>/preview-<n>.<hash>.webp               gallery (screenshots / slides / large image, 2048 px)
 v/<id>/poster.<hash>.webp                    video poster
 v/<id>/preview.<hash>.mp4                    video preview clip
-v/<id>/demo/**                               unzipped website template (WEBSITE_TEMPLATE only)
+d/<id>/**                                    hosted demo: the unzipped website template (WEBSITE_TEMPLATE only)
 ```
+
+`v/` and `a/` are served from the asset host; `d/` only from the demo host (research R20), which
+can read nothing else. Adding a demo is only this upload plus `demoEntryPath`: no infrastructure
+changes per item.
 
 `<hash>` is the item's import hash: 8 hex chars generated once per item per import run and shared by
 all of that item's generated files, so keys differ only by name and width (research R14). Every
 re-import gets new keys, and superseded keys are deleted after the record is written.
 
-Every `v/` object except `demo/**` is keyed by import hash and gets `Cache-Control: public, max-age=31536000,
-immutable`. `demo/**` gets `max-age=3600`. `a/` objects get `Cache-Control: private, no-store`.
+Every `v/` object is keyed by import hash and gets `Cache-Control: public, max-age=31536000,
+immutable`. `d/` objects get `max-age=3600`, and each needs its correct `Content-Type`: both hosts
+send `nosniff`. `a/` objects get `Cache-Control: private, no-store`.
 
 ---
 

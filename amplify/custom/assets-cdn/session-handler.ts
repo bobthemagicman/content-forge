@@ -1,3 +1,4 @@
+import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { getSignedCookies } from "@aws-sdk/cloudfront-signer";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
@@ -7,12 +8,20 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "
 /**
  * The asset session endpoint behind CloudFront (contracts/assets-cdn.md, research R7, R8, R19).
  *
- * `GET /_session` trades a Cognito ID token for CloudFront signed cookies covering `/v/*`, and
- * `GET /_session/signout` clears them. CloudFront reaches this function URL through OAC, so the
- * token travels in `X-Id-Token`: OAC's SigV4 signature takes the `Authorization` header.
+ * - `GET /_session` trades a Cognito ID token for CloudFront signed cookies covering `/v/*`.
+ * - `GET /_session/signout` clears them.
+ * - `GET /_session/demo/<id>` returns a 12-hour launch link for a published item's demo, which
+ *   lives on the separate demo host (research R20).
+ *
+ * CloudFront reaches this function URL through OAC, so the token travels in `X-Id-Token`: OAC's
+ * SigV4 signature takes the `Authorization` header.
  */
 
 const SESSION_SECONDS = 12 * 60 * 60;
+// The same working day as previews: a demo tab can't renew its own cookies, and the spec allows
+// demos to see each other (FR-027, FR-029). Matches MAX_AGE_SECONDS in demo-launch.js.
+const DEMO_SESSION_SECONDS = SESSION_SECONDS;
+const DEMO_PATH = /^\/_session\/demo\/([A-Za-z0-9-]{1,64})$/;
 const COOKIE_NAMES = ["CloudFront-Policy", "CloudFront-Signature", "CloudFront-Key-Pair-Id"] as const;
 
 function requireEnv(name: string): string {
@@ -24,6 +33,8 @@ function requireEnv(name: string): string {
 const allowedOrigins = new Set(requireEnv("ALLOWED_ORIGINS").split(",").map((o) => o.trim()).filter(Boolean));
 const allowedDomain = requireEnv("ALLOW_DOMAIN").toLowerCase();
 const cookieMode = requireEnv("COOKIE_MODE");
+const demosHost = requireEnv("DEMOS_DOMAIN");
+const contentTable = requireEnv("CONTENT_TABLE");
 if (cookieMode !== "same-site" && cookieMode !== "cross-site") {
   throw new Error(`session-handler: COOKIE_MODE must be same-site or cross-site, not ${cookieMode}`);
 }
@@ -35,6 +46,7 @@ const verifier = CognitoJwtVerifier.create({
 });
 
 const ssm = new SSMClient({});
+const dynamodb = new DynamoDBClient({});
 
 interface SigningConfig {
   assetHost: string;
@@ -107,7 +119,11 @@ function isKeyFetchFailure(error: unknown): boolean {
   return error instanceof FetchError || error instanceof JwksValidationError || error instanceof JwksNotAvailableInCacheError;
 }
 
-async function issueSession(event: APIGatewayProxyEventV2, origin: string | undefined): Promise<Result> {
+/**
+ * The checks every signed grant needs: an allowed `Origin`, a valid Cognito ID token, and a verified
+ * address in the allowed domain. Returns the error response, or `undefined` when all pass.
+ */
+async function authorize(event: APIGatewayProxyEventV2, origin: string | undefined): Promise<Result | undefined> {
   if (!origin || !allowedOrigins.has(origin)) return json(403, "forbidden", origin);
 
   const token = header(event, "X-Id-Token");
@@ -130,15 +146,22 @@ async function issueSession(event: APIGatewayProxyEventV2, origin: string | unde
   const emailVerified: unknown = claims.email_verified;
   const unverified = emailVerified === false || emailVerified === "false";
   if (!email.endsWith(`@${allowedDomain}`) || unverified) return json(403, "forbidden", origin);
+  return undefined;
+}
+
+/** A custom policy for every URL under `resource`, valid until `expiresAt` (epoch seconds). */
+function customPolicy(resource: string, expiresAt: number): string {
+  return JSON.stringify({ Statement: [{ Resource: resource, Condition: { DateLessThan: { "AWS:EpochTime": expiresAt } } }] });
+}
+
+async function issueSession(event: APIGatewayProxyEventV2, origin: string | undefined): Promise<Result> {
+  const denied = await authorize(event, origin);
+  if (denied) return denied;
 
   try {
     const { assetHost, keyPairId, privateKey } = await loadSigningConfig();
     const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-    const policy = JSON.stringify({
-      Statement: [
-        { Resource: `https://${assetHost}/v/*`, Condition: { DateLessThan: { "AWS:EpochTime": expiresAt } } },
-      ],
-    });
+    const policy = customPolicy(`https://${assetHost}/v/*`, expiresAt);
     const signed = getSignedCookies({ keyPairId, privateKey, policy });
     const attributes = cookieAttributes(SESSION_SECONDS);
     return {
@@ -152,6 +175,65 @@ async function issueSession(event: APIGatewayProxyEventV2, origin: string | unde
     };
   } catch (error) {
     console.error("session-handler: could not sign the asset session", error);
+    return json(500, "internal", origin);
+  }
+}
+
+/**
+ * The demo's entry path as URL path segments, or `undefined` if it isn't a plain relative path.
+ * Ingest validates it too (data-model.md); this keeps a bad record from producing a bad link.
+ */
+function encodeEntryPath(entryPath: string): string | undefined {
+  const segments = entryPath.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === ".." || segment.includes("\\"))) {
+    return undefined;
+  }
+  return segments.map(encodeURIComponent).join("/");
+}
+
+/**
+ * A launch link for one published item's demo. The demo host's `/_launch/*` function turns the
+ * signed values into cookies scoped to `/<id>/` and redirects to the entry page (demo-launch.js).
+ */
+async function issueDemoLaunch(event: APIGatewayProxyEventV2, origin: string | undefined, id: string): Promise<Result> {
+  const denied = await authorize(event, origin);
+  if (denied) return denied;
+
+  try {
+    const { Item } = await dynamodb.send(
+      new GetItemCommand({
+        TableName: contentTable,
+        Key: { id: { S: id } },
+        ProjectionExpression: "#status, demoEntryPath",
+        ExpressionAttributeNames: { "#status": "status" },
+      }),
+    );
+    // Drafts are as invisible here as they are in the catalog API.
+    const entryPath = Item?.status?.S === "PUBLISHED" ? Item.demoEntryPath?.S : undefined;
+    if (!entryPath) return json(404, "not_found", origin);
+
+    const encodedEntry = encodeEntryPath(entryPath);
+    if (!encodedEntry) {
+      console.error(`session-handler: item ${id} has an invalid demoEntryPath`);
+      return json(500, "internal", origin);
+    }
+
+    const { keyPairId, privateKey } = await loadSigningConfig();
+    const expiresAt = Math.floor(Date.now() / 1000) + DEMO_SESSION_SECONDS;
+    const signed = getSignedCookies({ keyPairId, privateKey, policy: customPolicy(`https://${demosHost}/${id}/*`, expiresAt) });
+    // The values are URL-safe base64 and key IDs, so they need no encoding (URLSearchParams would
+    // turn `~` into `%7E`, which the launch function would then copy into the cookie).
+    const query = `p=${signed["CloudFront-Policy"]}&s=${signed["CloudFront-Signature"]}&k=${signed["CloudFront-Key-Pair-Id"]}`;
+    return {
+      statusCode: 200,
+      headers: { ...corsHeaders(origin), "Content-Type": "application/json", "Cache-Control": "no-store" },
+      body: JSON.stringify({
+        url: `https://${demosHost}/_launch/${id}/${encodedEntry}?${query}`,
+        expiresAt: new Date(expiresAt * 1000).toISOString(),
+      }),
+    };
+  } catch (error) {
+    console.error("session-handler: could not issue the demo launch link", error);
     return json(500, "internal", origin);
   }
 }
@@ -171,7 +253,8 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<Result> {
   const method = event.requestContext.http.method;
   const path = event.rawPath.replace(/\/+$/, "");
 
-  if (path !== "/_session" && path !== "/_session/signout") return json(404, "not_found", origin);
+  const demoId = DEMO_PATH.exec(path)?.[1];
+  if (path !== "/_session" && path !== "/_session/signout" && !demoId) return json(404, "not_found", origin);
 
   if (method === "OPTIONS") {
     if (!origin || !allowedOrigins.has(origin)) return json(403, "forbidden", origin);
@@ -179,5 +262,6 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<Result> {
   }
   if (method !== "GET") return json(405, "method_not_allowed", origin);
 
+  if (demoId) return issueDemoLaunch(event, origin, demoId);
   return path === "/_session/signout" ? clearSession(origin) : issueSession(event, origin);
 }

@@ -254,7 +254,7 @@ The user opens a "See all" grid for a content type, sees how many times an item 
 - Item details (source URL, license, purchase date) are entered through the manifest or per-item details files for now. Importing marketplace purchase-history exports is deferred until sample exports are available.
 - No asset has been used on a project yet, so the future usage tracking won't need historical data backfilled.
 - The owner's Aeonik font license covers use in this application. The owner supplies the brand colors and the logo.
-- `example.com` is a placeholder for the owner's domain, set per deployment. The app will be served at `content.example.com`, with previews and demos on a separate subdomain (`assets.example.com`). DNS is managed in Route 53.
+- `example.com` is a placeholder for the owner's domain, set per deployment. The app will be served at `content.example.com`, with previews on a separate subdomain (`assets.example.com`) and demos on a separate site outside the owner's domain (research R20). DNS is managed in Route 53.
 - There is one production environment (`master`). Separate personal environments are used for development. They run the app on `localhost` with their own temporary asset address instead of `assets.example.com`, and the cost alert exists only in production.
 
 ### Out of Scope (this release)
