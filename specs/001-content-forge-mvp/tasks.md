@@ -52,7 +52,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     - `test:ingest-e2e` (`vitest run -c vitest.ingest-e2e.config.ts`);
     - `ingest` (`tsx tools/ingest/cli.ts`);
   - create `.nvmrc` containing `24`.
-  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root plus `amplify/`, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. The E2E work added `test:e2e`, `test:smoke`, and `build:e2e` (the export with `DEMO_MODE` off and assets on `https://assets.e2e.test`, which the Playwright web server builds). Still to do: `test:infra`, `test:ingest-e2e`, `ingest`, and the `infra` typecheck project.
+  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root plus `amplify/`, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. The E2E work added `test:e2e`, `test:smoke`, and `build:e2e` (the export with `DEMO_MODE` off and assets on `https://assets.e2e.test`, which the Playwright web server builds). The backend work added `test:infra`, and `typecheck` now also checks `infra/edge-cert/`. Still to do: `test:ingest-e2e` and `ingest`.
 - [ ] T002 Install dependencies, updating `package.json` and `package-lock.json`:
   - **runtime**: `aws-amplify`, `react-aria-components`;
   - **backend dev**: `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`,
@@ -66,7 +66,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
 
   Run `npx playwright install chromium firefox webkit`. Every dependency here is justified in
   plan.md Complexity Tracking (Principle VI).
-  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. The E2E work added `@playwright/test` and `@axe-core/playwright` (the browsers install with `npx playwright install`). Still to do: the remaining backend packages (`aws-jwt-verify`, `@aws-sdk/*`), the ingest packages, and `aws-sdk-client-mock`. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. The committed lockfile is a fresh install plus the nested entries a second install adds, plus hand-added nested `@opentelemetry/core@2.0.0` and `semver` entries under the two Amplify constructs, which bundle packages whose dependencies they don't bundle. npm 11.19 also prunes those nested entries, and esbuild's optional entries, on an incremental install; restore any that disappear from the previous lockfile. After any dependency change, check that `npm ci` passes with CI's npm version (`npx npm@<version> ci`; newer npm is stricter) and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
+  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. The E2E work added `@playwright/test` and `@axe-core/playwright` (the browsers install with `npx playwright install`). The backend work added `aws-jwt-verify`, `@aws-sdk/cloudfront-signer`, `@aws-sdk/client-ssm`, `aws-sdk-client-mock`, and `esbuild` (CDK bundles Lambda code with it; without a top-level copy it falls back to Docker). Still to do: the DynamoDB and S3 SDK packages (with T093 and US4) and the ingest packages. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. The committed lockfile is a fresh install plus the nested entries a second install adds, plus hand-added nested `@opentelemetry/core@2.0.0` and `semver` entries under the two Amplify constructs, which bundle packages whose dependencies they don't bundle. npm 11.19 also prunes those nested entries, and esbuild's optional entries, on an incremental install; restore any that disappear from the previous lockfile. npm 11.5 does the same on `npm install <pkg>`: the backend work restored 30 dropped entries (the rolldown and lightningcss bindings and the nested Amplify entries) by copying them back from the previous lockfile. After any dependency change, check that `npm ci` passes with CI's npm version (`npx npm@<version> ci`; newer npm is stricter) and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
 - [x] T003 [P] Rewrite `next.config.ts` per research R1:
   - add `output: 'export'`, `trailingSlash: true`,
     `images: { loader: 'custom', loaderFile: './src/lib/assets/image-loader.ts' }`;
@@ -97,7 +97,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
   - `vitest.infra.config.ts`: node environment, include `tests/infra/**`;
   - `vitest.ingest-e2e.config.ts`: node environment, include `tests/e2e-ingest/**`, `testTimeout`
     300 s, no file parallelism.
-  - **Progress (beta preview):** `vitest.config.ts` and `tests/setup/vitest.setup.ts` exist. The `$amplify` alias is in, and the setup file registers Testing Library's `cleanup` (Vitest runs without globals). Still to do: `vitest.infra.config.ts` and `vitest.ingest-e2e.config.ts`.
+  - **Progress (beta preview):** `vitest.config.ts` and `tests/setup/vitest.setup.ts` exist. The `$amplify` alias is in, and the setup file registers Testing Library's `cleanup` (Vitest runs without globals). The backend work added `vitest.infra.config.ts`. Still to do: `vitest.ingest-e2e.config.ts`.
 - [x] T007 [P] Create `playwright.config.ts`:
   - project `e2e`: `testDir: tests/e2e`, Chromium. The config's `webServer` runs
     `node scripts/serve-out.mjs` on port 4173;
@@ -119,7 +119,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     `npm test` → `npm run build` → `npx playwright install --with-deps chromium firefox webkit` →
     `npm run test:e2e` → `npm run test:infra`;
   - upload the Playwright report on failure.
-  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. `use-e2e-outputs` runs from `prebuild`/`typecheck` (T041). The Playwright browsers, `test:e2e`, and the report upload on failure are in. Still to do: `test:infra` (with T023).
+  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. `use-e2e-outputs` runs from `prebuild`/`typecheck` (T041). The Playwright browsers, `test:e2e`, and the report upload on failure are in. `test:infra` runs after the unit tests.
 
 ---
 
@@ -132,17 +132,18 @@ that every story needs
 
 ### Bootstrap & edge infrastructure
 
-- [ ] T010 [P] Create the standalone CDK app `infra/edge-cert/`:
+- [x] T010 [P] Create the standalone CDK app `infra/edge-cert/`:
   - files: `package.json` (`aws-cdk-lib`, `constructs`, `aws-cdk`), `cdk.json`, `tsconfig.json`
     (strict, checked by the root `typecheck` script), `bin/edge-cert.ts`
     (`env.region = 'us-east-1'`), and `lib/edge-cert-stack.ts`;
   - the stack: an ACM `Certificate` for `assets.example.com`, DNS-validated against
     `HostedZone.fromHostedZoneAttributes` using context `hostedZoneId`, with `CfnOutput`
     `AssetsCertArn` (research R10).
-- [ ] T011 [P] Write CDK assertion tests for `infra/edge-cert` in `tests/infra/edge-cert.test.ts`:
+  - **Done:** the domain, zone ID, and zone name come from context (`-c assetsDomain=… -c hostedZoneId=…`) or the `ASSETS_DOMAIN`/`HOSTED_ZONE_ID`/`HOSTED_ZONE_NAME` variables, so the real domain stays out of the repo; the zone name defaults to the domain's parent. The app has its own lockfile and runs with `tsx`.
+- [x] T011 [P] Write CDK assertion tests for `infra/edge-cert` in `tests/infra/edge-cert.test.ts`:
   the cert's domain is `assets.example.com`, it uses DNS validation, the stack region is
   `us-east-1`, and the output `AssetsCertArn` exists.
-- [ ] T012 [P] Create `scripts/bootstrap/create-signing-keys.sh` (`--env <name> --profile <p>
+- [x] T012 [P] Create `scripts/bootstrap/create-signing-keys.sh` (`--env <name> --profile <p>
   [--rotate]`). `<name>` is `master` or `sandbox-<username>` (research R19). The script:
   1. generates an RSA-2048 key pair with `openssl`;
   2. writes the private key with `aws ssm put-parameter --type SecureString` to
@@ -152,6 +153,7 @@ that every story needs
      committed;
   4. deletes every temporary private-key file. Use `trap` cleanup and never write under the repo
      (research R8).
+  - **Done:** `--region` defaults to `us-west-2`. `--rotate` passes `--overwrite`; without it the script exits if the parameter exists. Checked against a stubbed `aws`: first run, existing key, rotate, and a failed SSM write (exits non-zero and writes no public key). The temporary directory is removed in every case.
 - [x] T013 [P] Create `src/lib/content-types.ts`. It exports the `CONTENT_TYPES` ordered array:
   `WEBSITE_TEMPLATE`, `POWERPOINT_TEMPLATE`, `VIDEO`, `IMAGE`, `TEXTURE`, `OTHER`. Each entry has:
   - `label` (e.g., "Website Templates");
@@ -190,7 +192,7 @@ that every story needs
   - `logoutUrls`: `https://content.example.com/` and `http://localhost:3000/`;
   - `triggers: { preSignUp }`.
   - **Done:** `example.com` and `content.example.com` come from `ALLOWED_EMAIL_DOMAIN` and `APP_ORIGIN` at synth time (`amplify/config.ts`), so the owner's domain stays out of the repo. The app client's OAuth scopes are `OPENID EMAIL PROFILE`. Because `email` login is on, the client also lists `COGNITO` as a provider; no password UI exists, and `allowAdminCreateUserOnly` blocks self sign-up.
-- [ ] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
+- [x] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
   [data-model.md](./data-model.md#entity-content):
   - enums `ContentType`, `ContentStatus`, `LicenseType`;
   - `archiveBytes` as `a.float()`, and `thumbKeys`/`meta` as `a.json()`;
@@ -211,7 +213,8 @@ that every story needs
   Record both outcomes in `specs/001-content-forge-mvp/research.md` (R4).
 
   Export `type Schema`. Don't add `getDownloadUrl` yet; that's T094.
-- [ ] T018 Create `amplify/custom/assets-cdn/construct.ts`, part 1. The `AssetsCdn` construct takes
+  - **Done:** R4 verified at synth (a local `defineBackend` synth, not yet a deployed sandbox). With all three operation groups disabled, the transformer still generates `listContentBySlug` and `listContentByTypeAndPublishedAt` and nothing else: no `getContent`, `listContents`, mutations, or subscriptions. The `ContentType` enum works as the index partition key (a DynamoDB `S` attribute). `tests/unit/data/schema.test.ts` keeps the enum in step with `CONTENT_TYPES`. Confirm the queries answer on the first deploy (T054).
+- [x] T018 Create `amplify/custom/assets-cdn/construct.ts`, part 1. The `AssetsCdn` construct takes
   props `{ envName, isProduction, publicKeyPem, userPoolId, userPoolClientId, allowedOrigins,
   assetsDomain?, certificateArn?, hostedZoneId?, hostedZoneName? }`. The four optional props are
   required when `isProduction`, and the construct throws if they're missing (research R19). It
@@ -233,7 +236,8 @@ that every story needs
     distribution ↔ session-function dependency cycle.
 
   Follow [contracts/assets-cdn.md](./contracts/assets-cdn.md) and research R6.
-- [ ] T019 Extend `amplify/custom/assets-cdn/construct.ts`, part 2. Add:
+  - **Done:** the four optional props, plus `budgetAlertEmail` (T019), are required in production. The bucket name is generated (a fixed `content-forge-assets-<env>` could already be taken: S3 names are global) and reported as `custom.assetsBucketName`. The bucket is retained on delete. The distribution also uses `PriceClass_100` (North America and Europe edges, Principle I).
+- [x] T019 Extend `amplify/custom/assets-cdn/construct.ts`, part 2. Add:
   - DynamoDB table `DownloadEvents`: PK `contentId`, SK `downloadedAtEmail`, on-demand billing, PITR
     off;
   - an `ssm.StringParameter` `/content-forge/<env>/cloudfront/key-pair-id` set to the public
@@ -243,7 +247,8 @@ that every story needs
     budget is account-wide, so sandboxes don't create one;
   - public readonly props `bucket`, `distribution`, `downloadEventsTable`, `assetsBaseUrl`
     (`https://<asset host>`).
-- [ ] T020 [P] Create `amplify/custom/assets-cdn/session-handler.ts`, a Lambda function URL handler
+  - **Done:** the budget's alert address is a construct prop, which `backend.ts` fills from `BUDGET_ALERT_EMAIL`. The table is retained in production and deleted with a sandbox.
+- [x] T020 [P] Create `amplify/custom/assets-cdn/session-handler.ts`, a Lambda function URL handler
   per [contracts/assets-cdn.md](./contracts/assets-cdn.md#get-_session):
   - **`GET /_session`**: validate `Origin` against `ALLOWED_ORIGINS`. Verify `X-Id-Token` with
     `CognitoJwtVerifier` (`tokenUse: 'id'`). Require an `@example.com` email. Sign cookies with
@@ -258,7 +263,8 @@ that every story needs
   - **Errors**: `401`/`403`/`500` JSON bodies.
   - **SSM**: read the private key, key-pair ID, and asset host from the parameter names in env and
     cache them per container.
-- [ ] T021 Extend `amplify/custom/assets-cdn/construct.ts`, part 3. Add the session Lambda:
+  - **Done:** the allowed domain comes from env `ALLOW_DOMAIN` (as in pre-sign-up). Unknown paths return `404` and other methods `405`. `email_verified` is checked as boolean or string. Sign-out reads the asset host from SSM, since the production cookie's `Domain` must match to clear it.
+- [x] T021 Extend `amplify/custom/assets-cdn/construct.ts`, part 3. Add the session Lambda:
   - a `NodejsFunction` for `session-handler.ts`: `Runtime.NODEJS_24_X`, 256 MB, 5 s timeout,
     `reservedConcurrentExecutions: 5`, log group retention 14 days;
   - env `USER_POOL_ID`, `USER_POOL_CLIENT_ID`, `ALLOWED_ORIGINS`, `COOKIE_MODE`,
@@ -268,7 +274,8 @@ that every story needs
   - distribution behavior `/_session*` → `FunctionUrlOrigin.withOriginAccessControl`, with
     `CACHING_DISABLED` and an origin request policy forwarding headers `X-Id-Token` and `Origin`
     (depends on T018–T020).
-- [ ] T022 [P] Write unit tests in `tests/unit/assets/session-handler.test.ts`, mocking the verifier
+  - **Done:** CORS comes from the Lambda alone, not also a response headers policy: it echoes the one exact allowed origin, and a second source would duplicate headers. The function runs on ARM, bundles the AWS SDK (the CloudFront signer isn't in the Lambda runtime), and gets both `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` permissions for CloudFront from CDK.
+- [x] T022 [P] Write unit tests in `tests/unit/assets/session-handler.test.ts`, mocking the verifier
   and SSM with `aws-sdk-client-mock`. Cover:
   - a valid token gives `204` with exactly three cookies, each with the required attributes;
   - the policy resource is `/v/*` with a 12 h expiry;
@@ -278,7 +285,8 @@ that every story needs
   - signout clears all three cookies;
   - preflight returns the CORS headers;
   - the SSM read is cached across invocations.
-- [ ] T023 [P] Write CDK assertion tests in `tests/infra/assets-cdn.test.ts` that synthesize
+  - **Done:** also covers verified signatures (RSA-SHA1 against the public key), case-insensitive domains, lookalike and sub-domains, unverified email, 500 on an SSM failure, and an SSM retry after a failed read.
+- [x] T023 [P] Write CDK assertion tests in `tests/infra/assets-cdn.test.ts` that synthesize
   `AssetsCdn` in an isolated `App`/`Stack`, once with `isProduction: true` and once as a sandbox.
   Generate the `publicKeyPem` at test time with `crypto.generateKeyPairSync`. Assert:
   - the bucket blocks all public access;
@@ -292,11 +300,12 @@ that every story needs
     `COOKIE_MODE` is `cross-site`;
   - log retention is 14 days;
   - constructing with `isProduction: true` and no `certificateArn` throws.
-- [ ] T024 [P] Write a guard test in `tests/infra/function-logging.test.ts` (Principle I: bounded
+  - **Done:** also checks the S3 TLS-only policy, the SSM and KMS scoping, the download table, the SSM outputs, and that production refuses to synth without `certificateArn`, `hostedZoneId`, or `budgetAlertEmail`. Bundling is skipped in these tests.
+- [x] T024 [P] Write a guard test in `tests/infra/function-logging.test.ts` (Principle I: bounded
   logs). It globs `amplify/**/resource.ts`, and for every file that calls `defineFunction(`,
   asserts the call sets `logging: { retention: '2 weeks' }`. This catches a new function added
   without bounded log retention, which the `AssetsCdn` synth test can't see.
-- [ ] T025 Create `amplify/backend.ts`:
+- [x] T025 Create `amplify/backend.ts`:
   - `defineBackend({ auth, data, preSignUp })`;
   - `envName` is `process.env.AWS_BRANCH` when set, otherwise `sandbox-<os.userInfo().username>`,
     and `isProduction = envName === 'master'` (research R19);
@@ -311,8 +320,8 @@ that every story needs
   - `backend.addOutput({ custom: { assetsBaseUrl, assetsBucketName, contentTableName:
     backend.data.resources.tables['Content'].tableName, region } })`, per
     [contracts/data-api.md](./contracts/data-api.md#custom-outputs-amplify_outputsjson--custom).
-  - **Progress (auth):** `amplify/backend.ts` defines `auth` and `preSignUp`, with the `allowAdminCreateUserOnly` and 7-day refresh-token overrides (checked by a local synth). Still to do: `data`, `envName`, the signing key, the `assets` stack, and the custom outputs.
-- [ ] T026 Create `amplify.yml`:
+  - **Progress (auth):** `amplify/backend.ts` defines `auth` and `preSignUp`, with the `allowAdminCreateUserOnly` and 7-day refresh-token overrides (checked by a local synth). **Done:** `data`, `envName`, the signing key, the `assets` stack, and the custom outputs are in. Production's asset domain and zone name come from `ASSETS_DOMAIN` and `HOSTED_ZONE_NAME` (`amplify/config.ts`, defaulting to `assets.example.com` and its parent). A local synth of both a branch environment and `master` passes.
+- [x] T026 Create `amplify.yml`:
   - `backend.phases.build`: `nvm install 24 && nvm use 24`, `npm ci`,
     `npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID`;
   - `frontend.phases.preBuild`: `aws s3 cp "$FONTS_S3_URI" src/app/fonts/ --recursive` (the
@@ -326,6 +335,7 @@ that every story needs
     `style-src 'unsafe-inline'`. Don't drop either.
 
   Research R2, R18.
+  - **Done, with one change:** the response headers and the 404 rewrite aren't in `amplify.yml`. Amplify has deprecated `customHeaders` there, and the CSP must name the real asset host, which stays out of this public repo. `scripts/hosting/apply-settings.sh` builds the R18 headers from `ASSETS_DOMAIN` (`scripts/hosting/custom-headers.mjs`, unit-tested against R18) and applies them with `aws amplify update-app`, like the beta deploy. The cache holds `.npm/` rather than `node_modules/`, which `npm ci` replaces anyway.
 - [ ] T027 (owner) Run the one-time bootstrap from [quickstart.md](./quickstart.md#2-one-time-bootstrap-documented-exceptions-to-everything-as-code):
   1. deploy `infra/edge-cert`;
   2. run `scripts/bootstrap/create-signing-keys.sh --env master` and commit

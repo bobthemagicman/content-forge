@@ -105,6 +105,12 @@ they're the first tasks of implementation.
     to signed-in users through the API (they aren't secret).
   - That an enum field (`type`) works as an index partition key. If it doesn't, store `type` as
     `a.string()` validated against `CONTENT_TYPES` by ingest.
+- **Spike outcome (2026-11-06, local synth; T017)**: both hold. With mutations, subscriptions, and
+  queries disabled, the transformer generates exactly `listContentBySlug` and
+  `listContentByTypeAndPublishedAt`, with their resolvers and indexes, and no `getContent` or
+  `listContents`. The `ContentType` enum works as the index partition key (stored as a DynamoDB
+  `S` attribute). Drafts stay unreadable through the API. Still to confirm against a deployed
+  backend: that both queries answer (T054).
 - **Rationale**:
   - Users only read. All writes come from the owner's ingest or from the download Lambda, which
     gives least privilege.
