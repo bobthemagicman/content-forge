@@ -78,7 +78,7 @@ beforeEach(() => {
     Item: { status: { S: "PUBLISHED" }, demoEntryPath: { S: "site files/index.html" } },
   });
   ssm.on(GetParameterCommand).callsFake(({ Name }: { Name: string }) => ({ Parameter: { Value: PARAMS[Name] } }));
-  verify.mockReset().mockResolvedValue({ email: "ada@example.com", email_verified: true });
+  verify.mockReset().mockResolvedValue({ email: "ada@example.com", email_verified: true, "custom:hd": "example.com" });
   vi.useFakeTimers({ now: new Date("2026-11-06T12:00:00Z"), toFake: ["Date"] });
 });
 
@@ -164,9 +164,24 @@ describe("GET /_session", () => {
   });
 
   it("accepts the allowed domain in any case", async () => {
-    verify.mockResolvedValue({ email: "Ada@Example.COM" });
+    verify.mockResolvedValue({ email: "Ada@Example.COM", "custom:hd": "Example.COM" });
     const handler = await loadHandler();
     expect((await handler(withToken())).statusCode).toBe(204);
+  });
+
+  it.each([
+    ["has no hosted domain (a consumer Google account)", {}],
+    ["is in another Workspace", { "custom:hd": "other.com" }],
+    ["has a subdomain as its hosted domain", { "custom:hd": "sub.example.com" }],
+    ["has a non-string hosted domain", { "custom:hd": ["example.com"] }],
+  ])("rejects a token whose account %s with 403", async (_, claims) => {
+    verify.mockResolvedValue({ email: "ada@example.com", email_verified: true, ...claims });
+    const handler = await loadHandler();
+    for (const path of ["/_session", "/_session/demo/abc-123"]) {
+      const result = await handler(withToken(path));
+      expect(result.statusCode).toBe(403);
+      expect(result.cookies).toBeUndefined();
+    }
   });
 
   it.each([

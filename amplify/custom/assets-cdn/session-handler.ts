@@ -120,8 +120,9 @@ function isKeyFetchFailure(error: unknown): boolean {
 }
 
 /**
- * The checks every signed grant needs: an allowed `Origin`, a valid Cognito ID token, and a verified
- * address in the allowed domain. Returns the error response, or `undefined` when all pass.
+ * The checks every signed grant needs: an allowed `Origin`, a valid Cognito ID token, a verified
+ * address in the allowed domain, and that domain as the Google Workspace (`custom:hd`). Returns the
+ * error response, or `undefined` when all pass.
  */
 async function authorize(event: APIGatewayProxyEventV2, origin: string | undefined): Promise<Result | undefined> {
   if (!origin || !allowedOrigins.has(origin)) return json(403, "forbidden", origin);
@@ -145,7 +146,11 @@ async function authorize(event: APIGatewayProxyEventV2, origin: string | undefin
   // Typed as a boolean, but federated identities can carry it as the string "false".
   const emailVerified: unknown = claims.email_verified;
   const unverified = emailVerified === false || emailVerified === "false";
-  if (!email.endsWith(`@${allowedDomain}`) || unverified) return json(403, "forbidden", origin);
+  // Google's hosted-domain claim, mapped on every sign-in (amplify/auth/resource.ts). Only
+  // Workspace accounts have it, so this refuses a consumer account using a company address.
+  const hostedDomain = claims["custom:hd"];
+  const inWorkspace = typeof hostedDomain === "string" && hostedDomain.toLowerCase() === allowedDomain;
+  if (!email.endsWith(`@${allowedDomain}`) || unverified || !inWorkspace) return json(403, "forbidden", origin);
   return undefined;
 }
 

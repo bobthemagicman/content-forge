@@ -23,7 +23,7 @@ test.describe("US1 access", () => {
     const authorize = page.waitForRequest((r) => r.url().startsWith(`${COGNITO_DOMAIN}/oauth2/authorize`));
     await signInButton(page).click();
     const params = new URL((await authorize).url()).searchParams;
-    expect(params.get("identity_provider")).toBe("Google");
+    expect(params.get("identity_provider")).toBe("GoogleWorkspace");
     expect(params.get("response_type")).toBe("code");
     expect(params.get("redirect_uri")).toBe("http://localhost:4173/auth/callback/");
   });

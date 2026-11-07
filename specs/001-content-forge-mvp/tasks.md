@@ -175,6 +175,7 @@ that every story needs
   - throws `Error('ONLY_ALLOWED_DOMAIN')` unless the email ends exactly with `@example.com`;
   - applies to every `triggerSource`, including `PreSignUp_ExternalProvider` (research R3,
     FR-001/002).
+  - **Hosted-domain check (2026-11-07):** now admits only `PreSignUp_ExternalProvider`, and also requires `custom:hd` (Google's `hd` claim) to equal the domain and `email_verified` not to be `"false"`. The session function checks `custom:hd` too.
 - [x] T015 [P] Write unit tests in `tests/unit/auth/pre-sign-up.test.ts`. Cover:
   - `user@example.com` accepted;
   - `USER@Example.com` accepted;
@@ -192,6 +193,7 @@ that every story needs
     `http://localhost:3000/auth/callback/`;
   - `logoutUrls`: `https://content.example.com/` and `http://localhost:3000/`;
   - `triggers: { preSignUp }`.
+  - **Hosted-domain check (2026-11-07):** Google is now an OIDC provider named `GoogleWorkspace` (issuer `https://accounts.google.com`), because only OIDC providers can map Google's `hd` claim, to custom attribute `custom:hd` (mutable). `email_verified` is mapped too. The app signs in with `{ provider: { custom: 'GoogleWorkspace' } }`.
   - **Done:** `example.com` and `content.example.com` come from `ALLOWED_EMAIL_DOMAIN` and `APP_ORIGIN` at synth time (`amplify/config.ts`), so the owner's domain stays out of the repo. The app client's OAuth scopes are `OPENID EMAIL PROFILE`. Because `email` login is on, the client also lists `COGNITO` as a provider; no password UI exists, and `allowAdminCreateUserOnly` blocks self sign-up.
 - [x] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
   [data-model.md](./data-model.md#entity-content):
@@ -510,7 +512,7 @@ without a session are denied (quickstart V1–V4, V12).
 
 - [ ] T047 [US1] Implement the landing page in `src/app/page.tsx`:
   - logo from `public/brand/logo-white.svg` (owner supplies the file), a one-line description, and
-    a React Aria `Button` "Sign in with Google" that calls `signInWithRedirect({ provider: 'Google' })`;
+    a React Aria `Button` "Sign in with Google" that calls `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })` (research R3);
   - the error banner reads `?error=` through `useSearchParams` inside `<Suspense>`;
   - an existing session triggers `router.replace('/browse/')`;
   - no catalog data is fetched (FR-002–FR-004).

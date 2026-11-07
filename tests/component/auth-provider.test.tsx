@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "@/lib/auth/auth-provider";
+import { AuthProvider, GOOGLE_PROVIDER_NAME } from "@/lib/auth/auth-provider";
 import { type Session, useSession } from "@/lib/auth/session";
 
 type HubCallback = (data: { payload: { event: string } }) => void;
@@ -112,10 +112,12 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("probe")).toHaveTextContent("signedOut");
   });
 
-  it("signs in through Google", async () => {
+  it("signs in through the Google Workspace OIDC provider the backend defines", async () => {
+    const backend = await import("../../amplify/config");
+    expect(GOOGLE_PROVIDER_NAME).toBe(backend.GOOGLE_PROVIDER_NAME);
     renderProvider();
     act(() => latest.current!.signIn());
-    expect(amplify.signInWithRedirect).toHaveBeenCalledWith({ provider: "Google" });
+    expect(amplify.signInWithRedirect).toHaveBeenCalledWith({ provider: { custom: GOOGLE_PROVIDER_NAME } });
   });
 
   it("returns to the landing error when the redirect can't start", async () => {

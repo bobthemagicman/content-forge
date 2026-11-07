@@ -47,7 +47,8 @@ Sent with `fetch(url, { credentials: 'include', headers: { 'X-Id-Token': idToken
    `http://localhost:3000` in personal sandboxes.
 2. The JWT verifies (`aws-jwt-verify`): issuer = user pool, `aud` = app client ID, `token_use = id`,
    not expired.
-3. `email` ends with `@example.com` and `email_verified` is not `false`.
+3. `email` ends with `@example.com`, `email_verified` is not `false`, and `custom:hd` (Google's
+   hosted-domain claim, research R3) is `example.com`, case-insensitively.
 
 **Responses**
 
