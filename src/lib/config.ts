@@ -10,6 +10,7 @@ export const ASSETS_BASE_URL = (process.env.NEXT_PUBLIC_ASSETS_BASE_URL ?? "/dem
 
 /**
  * Beta preview mode: a built-in demo catalog stands in for the Amplify backend, and sign-in is
- * simulated. On until the backend tasks (T014–T025) land.
+ * simulated. `NEXT_PUBLIC_DEMO_MODE=0` switches sign-in to Cognito (T035); the catalog follows once
+ * the data tasks land.
  */
 export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== "0";
