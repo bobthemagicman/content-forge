@@ -52,7 +52,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     - `test:ingest-e2e` (`vitest run -c vitest.ingest-e2e.config.ts`);
     - `ingest` (`tsx tools/ingest/cli.ts`);
   - create `.nvmrc` containing `24`.
-  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root plus `amplify/`, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. Still to do: `test:e2e`, `test:smoke`, `test:infra`, `test:ingest-e2e`, `ingest`, and the `infra` typecheck project.
+  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root plus `amplify/`, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. The E2E work added `test:e2e`, `test:smoke`, and `build:e2e` (the export with `DEMO_MODE` off and assets on `https://assets.e2e.test`, which the Playwright web server builds). Still to do: `test:infra`, `test:ingest-e2e`, `ingest`, and the `infra` typecheck project.
 - [ ] T002 Install dependencies, updating `package.json` and `package-lock.json`:
   - **runtime**: `aws-amplify`, `react-aria-components`;
   - **backend dev**: `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`,
@@ -66,7 +66,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
 
   Run `npx playwright install chromium firefox webkit`. Every dependency here is justified in
   plan.md Complexity Tracking (Principle VI).
-  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. Still to do: the remaining backend packages (`aws-jwt-verify`, `@aws-sdk/*`), the ingest packages, the remaining test packages, and the Playwright browsers. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. The committed lockfile is a fresh install plus the nested entries a second install adds, plus hand-added nested `@opentelemetry/core@2.0.0` and `semver` entries under the two Amplify constructs, which bundle packages whose dependencies they don't bundle. After any dependency change, check that `npm ci` passes with CI's npm version (`npx npm@<version> ci`; newer npm is stricter) and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
+  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. The E2E work added `@playwright/test` and `@axe-core/playwright` (the browsers install with `npx playwright install`). Still to do: the remaining backend packages (`aws-jwt-verify`, `@aws-sdk/*`), the ingest packages, and `aws-sdk-client-mock`. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. The committed lockfile is a fresh install plus the nested entries a second install adds, plus hand-added nested `@opentelemetry/core@2.0.0` and `semver` entries under the two Amplify constructs, which bundle packages whose dependencies they don't bundle. npm 11.19 also prunes those nested entries, and esbuild's optional entries, on an incremental install; restore any that disappear from the previous lockfile. After any dependency change, check that `npm ci` passes with CI's npm version (`npx npm@<version> ci`; newer npm is stricter) and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
 - [x] T003 [P] Rewrite `next.config.ts` per research R1:
   - add `output: 'export'`, `trailingSlash: true`,
     `images: { loader: 'custom', loaderFile: './src/lib/assets/image-loader.ts' }`;
@@ -98,7 +98,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
   - `vitest.ingest-e2e.config.ts`: node environment, include `tests/e2e-ingest/**`, `testTimeout`
     300 s, no file parallelism.
   - **Progress (beta preview):** `vitest.config.ts` and `tests/setup/vitest.setup.ts` exist. The `$amplify` alias is in, and the setup file registers Testing Library's `cleanup` (Vitest runs without globals). Still to do: `vitest.infra.config.ts` and `vitest.ingest-e2e.config.ts`.
-- [ ] T007 [P] Create `playwright.config.ts`:
+- [x] T007 [P] Create `playwright.config.ts`:
   - project `e2e`: `testDir: tests/e2e`, Chromium. The config's `webServer` runs
     `node scripts/serve-out.mjs` on port 4173;
   - projects `e2e-firefox` and `e2e-webkit`: same `testDir`, Firefox and WebKit devices, with
@@ -108,18 +108,18 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
 
   Also create `scripts/serve-out.mjs`, a `node:http` static server for `out/` that resolves
   `dir/` → `dir/index.html` and falls back to `404.html` with status 404.
-  - **Progress (beta preview):** `scripts/serve-out.mjs` exists (also `npm start`). Still to do: `playwright.config.ts`.
+  - **Done:** `scripts/serve-out.mjs` exists (also `npm start`). The web server runs `npm run build:e2e` first (`E2E_SKIP_BUILD=1` reuses `out/`) and is skipped when `SMOKE_BASE_URL` is set.
 - [x] T008 [P] Update `eslint.config.mjs` to ignore `out/`, `.amplify/`, `**/cdk.out/`,
   `amplify_outputs*.json`, `playwright-report/`, `test-results/`, and to set `react/no-danger` to
   `error` (the CSP allows inline scripts, research R18).
-- [ ] T009 [P] Create `.github/workflows/ci.yml`:
+- [x] T009 [P] Create `.github/workflows/ci.yml`:
   - trigger on pull requests and pushes to `master` and `0*-*` branches;
   - Node 24 with `npm ci`;
   - steps: `node scripts/ci/use-e2e-outputs.mjs` → `npm run lint` → `npm run typecheck` →
     `npm test` → `npm run build` → `npx playwright install --with-deps chromium firefox webkit` →
     `npm run test:e2e` → `npm run test:infra`;
   - upload the Playwright report on failure.
-  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. `use-e2e-outputs` runs from `prebuild`/`typecheck` (T041). Still to do: the Playwright E2E run, `test:infra`, and the report upload.
+  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. `use-e2e-outputs` runs from `prebuild`/`typecheck` (T041). The Playwright browsers, `test:e2e`, and the report upload on failure are in. Still to do: `test:infra` (with T023).
 
 ---
 
@@ -367,6 +367,7 @@ that every story needs
   `configureAmplify()` that calls `Amplify.configure(outputs)` with
   `import outputs from '@/../amplify_outputs.json'`, and an `assetsBaseUrl()` getter that reads
   `outputs.custom.assetsBaseUrl`.
+  - The identity pool is left out of the configuration: the app never uses AWS credentials, and with it every `fetchAuthSession()` also called Cognito Identity, even when signed out, where a failure read as signed out.
 - [ ] T031 [P] Create `src/lib/data/client.ts`. It exports a lazily created
   `generateClient<Schema>({ authMode: 'userPool' })`, typed from `amplify/data/resource.ts`.
 - [x] T032 [P] Create styled React Aria wrappers in `src/components/ui/`:
@@ -438,7 +439,8 @@ that every story needs
     website template with `demoEntryPath`, one without it but with `externalDemoUrl`, and one item
     whose archive is missing;
   - small placeholder WebP/MP4 files in `tests/e2e/fixtures/assets/`.
-- [ ] T043 Create `tests/e2e/fixtures/mock-backend.ts`, a Playwright `test.extend` fixture
+  - **Deferred to T084:** nothing calls AppSync yet (the data layer answers from the demo catalog), so a fixture catalog would go unexercised. Until then the mock backend serves assets from `public/demo/`.
+- [x] T043 Create `tests/e2e/fixtures/mock-backend.ts`, a Playwright `test.extend` fixture
   (depends on T041, T042). It provides:
   - `signedIn`: seeds `localStorage` with fake unsigned Cognito JWTs with a future `exp`, using
     Amplify's `CognitoIdentityServiceProvider.<clientId>.*` keys;
@@ -449,7 +451,8 @@ that every story needs
   - `page.route` for `https://assets.e2e.test/_session*` → `204`, and for asset paths → fixture
     files;
   - a request log so tests can assert that no catalog or asset requests happened.
-- [ ] T044 [P] Create `tests/e2e/helpers/axe.ts`. It exports
+  - **Done**, except the AppSync dispatch: AppSync requests are logged and answered with an `E2E.Unmocked` GraphQL error until T084 and T042 add the catalog responses. The fixture also stubs Cognito's hosted UI (`/oauth2/authorize`, `/logout`) and token revocation. It aborts any other off-origin request and fails the test, and it refuses to run if `amplify_outputs.json` isn't the E2E fixture. `signedIn` seeds once per tab, so sign-out stays signed out. The fixture lists the E2E port's redirect URIs first: away from `/`, Amplify picks the first sign-out URI on the same hostname.
+- [x] T044 [P] Create `tests/e2e/helpers/axe.ts`. It exports
   `expectNoA11yViolations(page, context?)`, which uses `@axe-core/playwright` with WCAG 2.1 AA tags
   and fails on any violation (SC-007).
 
@@ -470,7 +473,7 @@ without a session are denied (quickstart V1–V4, V12).
 
 ### Tests for User Story 1
 
-- [ ] T045 [P] [US1] Write Playwright E2E tests in `tests/e2e/us1-access.spec.ts` using
+- [x] T045 [P] [US1] Write Playwright E2E tests in `tests/e2e/us1-access.spec.ts` using
   `mock-backend.ts`. Cover:
   - `/` shows the sign-in button and makes **no** AppSync or asset requests;
   - clicking "Sign in with Google" navigates to the Cognito `/oauth2/authorize` URL with
@@ -480,6 +483,7 @@ without a session are denied (quickstart V1–V4, V12).
   - a signed-out user visiting `/browse/` is redirected to `/`;
   - sign-out calls `/_session/signout` and lands on `/`;
   - `expectNoA11yViolations` passes on `/`.
+  - **Done**, plus a callback case (`error_description` → `/?error=domain`). It runs on Chromium, Firefox, and WebKit. WebKit exposed a sign-out race: `router.replace('/')` (and the layout's signed-out redirect) cancelled the full-page navigation to Cognito's `/logout`. `AuthProvider.signOut()` now holds the session in `loading` and leaves navigation to that redirect.
 - [x] T046 [P] [US1] Write component tests in `tests/component/landing.test.tsx`: error query values
   `domain`/`signin` map to the right messages, and the sign-in button is keyboard-operable.
 

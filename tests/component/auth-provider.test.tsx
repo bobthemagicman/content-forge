@@ -134,7 +134,27 @@ describe("AuthProvider", () => {
     await act(async () => latest.current!.signOut());
     expect(fetchMock).toHaveBeenCalledWith("https://assets.example.com/_session/signout", { credentials: "include" });
     expect(fetchMock.mock.invocationCallOrder[0]).toBeLessThan(amplify.signOut.mock.invocationCallOrder[0]!);
-    expect(router.replace).toHaveBeenCalledWith("/");
+  });
+
+  it("leaves navigation to Cognito's logout redirect", async () => {
+    amplify.fetchAuthSession.mockResolvedValue(tokens({ email: "ada@example.com", name: "Ada" }));
+    // Amplify dispatches signedOut, then sends the page to /logout.
+    amplify.signOut.mockImplementation(async () => amplify.hub.forEach((cb) => cb({ payload: { event: "signedOut" } })));
+    renderProvider();
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("signedIn"));
+
+    await act(async () => latest.current!.signOut());
+    // Still "loading", so the signed-in layout doesn't start a client-side redirect to /.
+    expect(screen.getByTestId("probe")).toHaveTextContent("loading");
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("falls back to signed out when sign-out fails", async () => {
+    amplify.signOut.mockRejectedValue(new Error("invalid origin"));
+    renderProvider();
+
+    await act(async () => latest.current!.signOut());
+    expect(screen.getByTestId("probe")).toHaveTextContent("signedOut");
   });
 
   it("still signs out when clearing the asset cookies fails", async () => {
@@ -144,7 +164,6 @@ describe("AuthProvider", () => {
 
     await act(async () => latest.current!.signOut());
     expect(amplify.signOut).toHaveBeenCalledOnce();
-    expect(router.replace).toHaveBeenCalledWith("/");
   });
 
   it("skips the asset sign-out before the asset plane exists", async () => {
