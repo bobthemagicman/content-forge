@@ -1,11 +1,21 @@
 import { defineBackend } from "@aws-amplify/backend";
-import { auth } from "./auth/resource";
+import { existsSync, readFileSync } from "node:fs";
+import { userInfo } from "node:os";
+import { fileURLToPath } from "node:url";
 import { preSignUp } from "./auth/pre-sign-up/resource";
+import { auth } from "./auth/resource";
+import { ALLOWED_EMAIL_DOMAIN, APP_ORIGIN, ASSETS_DOMAIN, HOSTED_ZONE_NAME, LOCAL_ORIGIN } from "./config";
+import { AssetsCdn } from "./custom/assets-cdn/construct";
+import { data } from "./data/resource";
 
-// Auth only for now. T025 adds `data`, the environment name (research R19), the `assets` stack,
-// and the custom outputs.
-const backend = defineBackend({ auth, preSignUp });
+const backend = defineBackend({ auth, data, preSignUp });
 
+// --- Environment (research R19) ---------------------------------------------------------------
+// Amplify Hosting sets AWS_BRANCH; a personal `ampx sandbox` doesn't.
+const envName = process.env.AWS_BRANCH ?? `sandbox-${userInfo().username}`;
+const isProduction = envName === "master";
+
+// --- Auth overrides ---------------------------------------------------------------------------
 const { cfnUserPool, cfnUserPoolClient } = backend.auth.resources.cfnResources;
 
 // No self-service sign-up; accounts come only from federated Google sign-in, which the pre-sign-up
@@ -16,3 +26,39 @@ cfnUserPool.adminCreateUserConfig = { allowAdminCreateUserOnly: true };
 // Refresh tokens last 7 days (research R3).
 cfnUserPoolClient.refreshTokenValidity = 7;
 cfnUserPoolClient.tokenValidityUnits = { refreshToken: "days" };
+
+// --- Asset plane (research R6–R8) -------------------------------------------------------------
+const publicKeyPath = fileURLToPath(new URL(`./custom/assets-cdn/keys/${envName}.public-key.pem`, import.meta.url));
+if (!existsSync(publicKeyPath)) {
+  throw new Error(
+    `No CloudFront signing key for environment "${envName}" (${publicKeyPath}). ` +
+      `Run scripts/bootstrap/create-signing-keys.sh --env ${envName} --profile <profile>, then commit the public key.`,
+  );
+}
+
+const assets = new AssetsCdn(backend.createStack("assets"), "AssetsCdn", {
+  envName,
+  isProduction,
+  publicKeyPem: readFileSync(publicKeyPath, "utf8"),
+  userPoolId: backend.auth.resources.userPool.userPoolId,
+  userPoolClientId: backend.auth.resources.userPoolClient.userPoolClientId,
+  allowedOrigins: [isProduction ? APP_ORIGIN : LOCAL_ORIGIN],
+  allowedEmailDomain: ALLOWED_EMAIL_DOMAIN,
+  ...(isProduction && {
+    assetsDomain: ASSETS_DOMAIN,
+    certificateArn: process.env.ASSETS_CERT_ARN,
+    hostedZoneId: process.env.HOSTED_ZONE_ID,
+    hostedZoneName: HOSTED_ZONE_NAME,
+    budgetAlertEmail: process.env.BUDGET_ALERT_EMAIL,
+  }),
+});
+
+// --- Outputs (contracts/data-api.md, custom outputs) ------------------------------------------
+backend.addOutput({
+  custom: {
+    assetsBaseUrl: assets.assetsBaseUrl,
+    assetsBucketName: assets.bucket.bucketName,
+    contentTableName: backend.data.resources.tables["Content"].tableName,
+    region: backend.stack.region,
+  },
+});

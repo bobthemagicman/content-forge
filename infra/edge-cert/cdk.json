@@ -1,0 +1,4 @@
+{
+  "app": "npx tsx bin/edge-cert.ts",
+  "watch": { "include": ["bin/**", "lib/**"] }
+}
