@@ -7,12 +7,13 @@ import { auth } from "./auth/resource";
 import { ALLOWED_EMAIL_DOMAIN, APP_ORIGIN, ASSETS_DOMAIN, HOSTED_ZONE_NAME, LOCAL_ORIGIN } from "./config";
 import { AssetsCdn } from "./custom/assets-cdn/construct";
 import { data } from "./data/resource";
+import { resolveEnvName } from "./environment";
 
 const backend = defineBackend({ auth, data, preSignUp });
 
 // --- Environment (research R19) ---------------------------------------------------------------
 // Amplify Hosting sets AWS_BRANCH; a personal `ampx sandbox` doesn't.
-const envName = process.env.AWS_BRANCH ?? `sandbox-${userInfo().username}`;
+const envName = resolveEnvName(process.env.AWS_BRANCH, userInfo().username);
 const isProduction = envName === "master";
 
 // The domain settings default to `example.com` placeholders so the real domain stays out of this

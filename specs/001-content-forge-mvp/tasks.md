@@ -311,7 +311,9 @@ that every story needs
 - [x] T025 Create `amplify/backend.ts`:
   - `defineBackend({ auth, data, preSignUp })`;
   - `envName` is `process.env.AWS_BRANCH` when set, otherwise `sandbox-<os.userInfo().username>`,
-    and `isProduction = envName === 'master'` (research R19);
+    and `isProduction = envName === 'master'` (research R19). **Done:** `amplify/environment.ts`
+    rejects names the key script can't bootstrap (`tests/unit/environment.test.ts` keeps the two
+    patterns in step);
   - read `amplify/custom/assets-cdn/keys/<envName>.public-key.pem`. If it's missing, throw an error
     telling the developer to run `scripts/bootstrap/create-signing-keys.sh --env <envName>`;
   - `backend.createStack('assets')` with `new AssetsCdn(...)`, fed from `backend.auth.resources`,
@@ -1066,7 +1068,7 @@ download increases the item's displayed count by one.
 - [ ] T122 [P] Create `scripts/ci/check-bundle.mjs`, which fails if `out/` contains
   `-----BEGIN`, AWS secret-key patterns, `GOOGLE_CLIENT_SECRET`, or `.pem` files, and add it to
   `.github/workflows/ci.yml` after the build (Principle II: no secrets in bundles).
-- [ ] T123 Tighten the CSP's `connect-src` in `amplify.yml` to the exact endpoints seen in
+- [ ] T123 Tighten the CSP's `connect-src` in `scripts/hosting/custom-headers.mjs` to the exact endpoints seen in
   production (the AppSync host, the Cognito domain, `cognito-idp.us-west-2.amazonaws.com`), keeping
   the rest of the research R18 policy, confirm no console CSP
   violations on deployed pages, and record the final policy in

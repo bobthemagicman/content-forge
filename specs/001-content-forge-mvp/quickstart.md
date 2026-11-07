@@ -45,7 +45,9 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 
    Then apply the response headers (CSP, HSTS, ...) and the 404 rewrite, which name the asset host
    and so aren't committed: `ASSETS_DOMAIN=assets.<domain> scripts/hosting/apply-settings.sh
-   --app-id <id> --profile <p>`. Rerun it if the asset host changes.
+   --app-id <id> --profile <p>`. **Rerun it whenever `ASSETS_DOMAIN` changes**: the CSP names the
+   asset host, and nothing else updates it. Add `--check` to compare the app's settings with the
+   committed ones without changing anything (exit 1 on drift, for example after a console edit).
 
    Confirm the platform/framework setting from research R2.
 5. **Licensed fonts**: upload `Aeonik-Regular.woff2` and `Aeonik-Regular.woff` to a private S3
@@ -68,6 +70,10 @@ NEXT_PUBLIC_DEMO_MODE=0 npm run dev                              # http://localh
 Plain `npm run dev` runs the beta preview: simulated sign-in on the demo catalog. Without a sandbox,
 `predev`/`prebuild` copy the E2E fixture to `amplify_outputs.json` so the build still works;
 `ampx sandbox` overwrites it with the real file.
+
+The sandbox's environment name is `sandbox-<OS username>`. If your username has characters other
+than letters, digits, `.`, `_` and `-`, synth stops with an error: pick a name and set it for both
+commands, `--env sandbox-<name>` and `AWS_BRANCH=sandbox-<name> npx ampx sandbox ...`.
 
 Sandboxes use their own bucket, table, Cognito pool, and signing keys. Commit the sandbox's
 `keys/sandbox-<user>.public-key.pem`. The callback and logout URLs for `http://localhost:3000` are in
