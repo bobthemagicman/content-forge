@@ -5,7 +5,8 @@ name: Claude review
 # ready, not on every push; comment `@claude review again` (claude.yml) to re-review.
 #
 # Needs the CLAUDE_CODE_OAUTH_TOKEN secret (`claude setup-token`) and the Claude GitHub app.
-# Fork PRs get no secrets, so they're skipped.
+# Fork PRs get no secrets, so they're skipped. The action is pinned to a commit SHA because it
+# receives that token; Dependabot (.github/dependabot.yml) keeps the pin current.
 
 on:
   pull_request:
@@ -17,7 +18,11 @@ concurrency:
 
 jobs:
   review:
-    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    # Dependabot PRs can't read repo secrets, so they're skipped too.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -29,7 +34,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           track_progress: true
