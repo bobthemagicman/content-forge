@@ -1,6 +1,7 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { getSignedCookies } from "@aws-sdk/cloudfront-signer";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
+import { FetchError, JwksNotAvailableInCacheError, JwksValidationError } from "aws-jwt-verify/error";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 
 /**
@@ -91,11 +92,19 @@ function json(statusCode: number, error: string, origin: string | undefined): Re
   };
 }
 
-function cookieAttributes(assetHost: string, maxAge: number): string {
-  // Production: app and assets are same-site, so Lax first-party cookies scoped to the asset host.
-  // Sandboxes: localhost and *.cloudfront.net are different sites, so host-only SameSite=None.
-  const site = cookieMode === "same-site" ? `Domain=${assetHost}; SameSite=Lax` : "SameSite=None";
-  return `${site}; Path=/; Secure; HttpOnly; Max-Age=${maxAge}`;
+/**
+ * Host-only (no `Domain`, so no other host ever receives them) and limited to `/v/`, the only path the
+ * signed policy covers. Production: app and assets are same-site, so first-party `Lax` cookies.
+ * Sandboxes: localhost and *.cloudfront.net are different sites, so `SameSite=None`.
+ */
+function cookieAttributes(maxAge: number): string {
+  const sameSite = cookieMode === "same-site" ? "Lax" : "None";
+  return `Path=/v/; Secure; HttpOnly; SameSite=${sameSite}; Max-Age=${maxAge}`;
+}
+
+/** Failures to reach or read the user pool's signing keys: an outage, not a bad token. */
+function isKeyFetchFailure(error: unknown): boolean {
+  return error instanceof FetchError || error instanceof JwksValidationError || error instanceof JwksNotAvailableInCacheError;
 }
 
 async function issueSession(event: APIGatewayProxyEventV2, origin: string | undefined): Promise<Result> {
@@ -107,7 +116,12 @@ async function issueSession(event: APIGatewayProxyEventV2, origin: string | unde
   let claims: Awaited<ReturnType<typeof verifier.verify>>;
   try {
     claims = await verifier.verify(token);
-  } catch {
+  } catch (error) {
+    // Telling the user to sign in again wouldn't help during an outage.
+    if (isKeyFetchFailure(error)) {
+      console.error("session-handler: could not load the user pool's signing keys", error);
+      return json(500, "internal", origin);
+    }
     return json(401, "invalid_token", origin);
   }
 
@@ -126,7 +140,7 @@ async function issueSession(event: APIGatewayProxyEventV2, origin: string | unde
       ],
     });
     const signed = getSignedCookies({ keyPairId, privateKey, policy });
-    const attributes = cookieAttributes(assetHost, SESSION_SECONDS);
+    const attributes = cookieAttributes(SESSION_SECONDS);
     return {
       statusCode: 204,
       headers: {
@@ -142,19 +156,14 @@ async function issueSession(event: APIGatewayProxyEventV2, origin: string | unde
   }
 }
 
-async function clearSession(origin: string | undefined): Promise<Result> {
-  try {
-    const { assetHost } = await loadSigningConfig();
-    const attributes = cookieAttributes(assetHost, 0);
-    return {
-      statusCode: 204,
-      headers: { ...corsHeaders(origin), "Cache-Control": "no-store" },
-      cookies: COOKIE_NAMES.map((name) => `${name}=; ${attributes}`),
-    };
-  } catch (error) {
-    console.error("session-handler: could not clear the asset session", error);
-    return json(500, "internal", origin);
-  }
+function clearSession(origin: string | undefined): Result {
+  // Same name, host, and path as the cookies being cleared, so the browser replaces them.
+  const attributes = cookieAttributes(0);
+  return {
+    statusCode: 204,
+    headers: { ...corsHeaders(origin), "Cache-Control": "no-store" },
+    cookies: COOKIE_NAMES.map((name) => `${name}=; ${attributes}`),
+  };
 }
 
 export async function handler(event: APIGatewayProxyEventV2): Promise<Result> {

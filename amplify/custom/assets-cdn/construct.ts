@@ -168,9 +168,12 @@ export class AssetsCdn extends Construct {
         "function handler(event) { return { statusCode: 403, statusDescription: 'Forbidden' }; }",
       ),
     });
-    const viewHeaders = new cloudfront.ResponseHeadersPolicy(this, "ViewHeaders", {
-      comment: "Content Forge /v/*: no MIME sniffing",
-      securityHeadersBehavior: { contentTypeOptions: { override: true } },
+    const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, "SecurityHeaders", {
+      comment: "Content Forge assets: HSTS and no MIME sniffing",
+      securityHeadersBehavior: {
+        contentTypeOptions: { override: true },
+        strictTransportSecurity: { accessControlMaxAge: Duration.days(365), includeSubdomains: false, override: true },
+      },
     });
     const sessionRequests = new cloudfront.OriginRequestPolicy(this, "SessionRequests", {
       comment: "Content Forge /_session: forward the ID token and Origin only",
@@ -179,11 +182,14 @@ export class AssetsCdn extends Construct {
       cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
     });
 
+    // HTTPS only, with no redirect: a plain-HTTP request carrying a signed URL or an ID token would
+    // already have exposed it before any redirect.
     const signedOnly = {
       origin: s3Origin,
-      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
       allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
       trustedKeyGroups: [keyGroup],
+      responseHeadersPolicy: securityHeaders,
     };
 
     this.distribution = new cloudfront.Distribution(this, "Distribution", {
@@ -192,24 +198,22 @@ export class AssetsCdn extends Construct {
       minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       // North America and Europe edges only: cheapest, and the audience is one Workspace (Principle I).
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      // Denied twice over: the function answers 403, and the key group would refuse unsigned
+      // requests even if the function were ever detached.
       defaultBehavior: {
-        origin: s3Origin,
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        ...signedOnly,
         cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
         functionAssociations: [{ function: denyAll, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
       },
       additionalBehaviors: {
         // Previews, clips, and demos: signed cookies; keys are content-hashed, so cache hard.
-        "/v/*": {
-          ...signedOnly,
-          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
-          responseHeadersPolicy: viewHeaders,
-        },
+        "/v/*": { ...signedOnly, cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED },
         // Original archives: signed URLs only (the cookie policy covers /v/* alone), never cached.
         "/a/*": { ...signedOnly, cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED },
         "/_session*": {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(sessionUrl),
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          responseHeadersPolicy: securityHeaders,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           originRequestPolicy: sessionRequests,
