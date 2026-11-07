@@ -3,7 +3,7 @@
 import { fetchAuthSession, signOut as amplifySignOut, signInWithRedirect } from "aws-amplify/auth";
 import { Hub } from "aws-amplify/utils";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { assetsBaseUrl, configureAmplify } from "./amplify-config";
 import { type Session, SessionContext, type SessionUser } from "./session";
 
@@ -29,6 +29,8 @@ async function currentUser(): Promise<SessionUser | null> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [state, setState] = useState<SessionState>({ status: "loading", user: null });
+  // Set while signOut() hands the page to Cognito's /logout (see signOut below).
+  const signingOut = useRef(false);
 
   useEffect(() => {
     configureAmplify();
@@ -49,6 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           void load();
           break;
         case "signedOut":
+          if (!signingOut.current) setState(SIGNED_OUT);
+          break;
         case "tokenRefresh_failure":
           setState(SIGNED_OUT);
           break;
@@ -69,14 +73,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const signOut = useCallback(async () => {
+    // Hold the session in "loading" (the signed-in layout shows its busy state) rather than letting
+    // the signed-out redirect run: a client-side navigation started now can cancel the full-page one
+    // to Cognito's /logout below (seen in WebKit), which would leave the hosted-UI session alive.
+    signingOut.current = true;
+    setState({ status: "loading", user: null });
     const base = assetsBaseUrl();
     // Clears the asset cookies (contracts/assets-cdn.md). Best effort: they expire on their own, and
     // a failure here must not keep the user signed in.
     if (base) await fetch(`${base}/_session/signout`, { credentials: "include" }).catch(() => undefined);
-    // With OAuth configured, this leaves through Cognito's /logout, which returns to `/`.
-    await amplifySignOut();
-    router.replace("/");
-  }, [router]);
+    try {
+      // Every session here comes from the hosted UI, so this clears the tokens and sends the page
+      // through Cognito's /logout, which returns to `/`.
+      await amplifySignOut();
+    } catch {
+      // The local tokens are cleared before the redirect is attempted; fall back to the landing page.
+      signingOut.current = false;
+      setState(SIGNED_OUT);
+    }
+  }, []);
 
   const idToken = useCallback(async () => (await fetchAuthSession()).tokens?.idToken?.toString(), []);
 
