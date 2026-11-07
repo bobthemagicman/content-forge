@@ -123,7 +123,7 @@ Run against `https://content.example.com` (or a sandbox URL) after step 4.
 |---|---|---|---|---|
 | V1 | Landing hides content | Open `/` in a private window | Branding + "Sign in with Google". No thumbnails or item data in DOM or network | US1-1, FR-003 |
 | V2 | Allowed sign-in | Sign in with an `@example.com` account, then look the user up in the Cognito console | Arrive at `/browse/`. Header shows name/avatar. The user has `custom:hd = example.com` | US1-2, FR-014, R3 |
-| V3 | Personal account rejected | Sign in with a personal Gmail | Back on `/` with "authorized accounts only" | US1-3, FR-001/002, SC-002 |
+| V3 | Personal account rejected | Sign in with a personal Gmail | Google's own "can only be used within its organization" page (the Internal consent screen stops it first). If it ever gets past Google: back on `/` with "authorized accounts only", and no user in the pool | US1-3, FR-001/002, SC-002 |
 | V4 | Direct access denied | Signed out: `curl -I https://assets.example.com/v/<id>/thumb-320.<hash>.webp`, replay an expired download URL, and POST a `listContentByTypeAndPublishedAt` query to the AppSync URL with no token | `403` for the assets, `401` from AppSync | US1-6, FR-005, SC-002 |
 | V5 | Rows | On `/browse/`, Tab into a row and use arrow keys and the next button | One row per non-empty type in the fixed order. Keyboard moves card to card | US2, FR-007–FR-011 |
 | V6 | Detail + download | Open a card, then Download. Repeat with the largest archive in the library (multi-GB) | Detail facts shown. Download starts within 1 s and saves with its original name. The large file completes and its checksum matches the original. `downloadCount` +1 each time | US3, FR-015–FR-020, SC-001, SC-005 |
