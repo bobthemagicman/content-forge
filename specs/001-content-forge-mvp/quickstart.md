@@ -22,8 +22,8 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 
 ## 2. One-time bootstrap (documented exceptions to "everything as code")
 
-1. **Edge certificate**: `cd infra/edge-cert && npm ci && npx cdk deploy --profile <p>`. Note the
-   output `AssetsCertArn`.
+1. **Edge certificate**: `cd infra/edge-cert && npm ci && npx cdk deploy -c assetsDomain=assets.<domain>
+   -c hostedZoneId=<zone id> --profile <p>`. Note the output `AssetsCertArn`.
 2. **Signing keys**: `scripts/bootstrap/create-signing-keys.sh --env master --profile <p>`.
    - It writes the private key to SSM `/content-forge/master/cloudfront/private-key` (SecureString).
    - It writes the public key to `amplify/custom/assets-cdn/keys/master.public-key.pem`. Commit that
@@ -35,12 +35,17 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
    - secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`;
    - env vars `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget
      alert goes);
-   - env vars `ALLOWED_EMAIL_DOMAIN` (the Workspace domain allowed to sign in) and `APP_ORIGIN`
-     (`https://content.<domain>`). Both default to the `example.com` placeholders
+   - env vars `ALLOWED_EMAIL_DOMAIN` (the Workspace domain allowed to sign in), `APP_ORIGIN`
+     (`https://content.<domain>`), and `ASSETS_DOMAIN` (`assets.<domain>`; set `HOSTED_ZONE_NAME`
+     too if the zone isn't its parent domain). They default to the `example.com` placeholders
      (`amplify/config.ts`), so a deploy without them only admits `@example.com`;
    - env `NEXT_PUBLIC_DEMO_MODE=0`, so the front end uses Cognito instead of the beta preview's
      simulated sign-in;
    - the custom domain `content.example.com` → branch `master`.
+
+   Then apply the response headers (CSP, HSTS, ...) and the 404 rewrite, which name the asset host
+   and so aren't committed: `ASSETS_DOMAIN=assets.<domain> scripts/hosting/apply-settings.sh
+   --app-id <id> --profile <p>`. Rerun it if the asset host changes.
 
    Confirm the platform/framework setting from research R2.
 5. **Licensed fonts**: upload `Aeonik-Regular.woff2` and `Aeonik-Regular.woff` to a private S3
