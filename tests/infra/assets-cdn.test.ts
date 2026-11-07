@@ -1,4 +1,5 @@
 import { App, Stack } from "aws-cdk-lib";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -10,7 +11,9 @@ const { publicKey } = generateKeyPairSync("rsa", {
   privateKeyEncoding: { type: "pkcs8", format: "pem" },
 });
 
-const BASE: AssetsCdnProps = {
+type Props = Omit<AssetsCdnProps, "contentTable">;
+
+const BASE: Props = {
   envName: "sandbox-test",
   isProduction: false,
   publicKeyPem: publicKey,
@@ -20,7 +23,7 @@ const BASE: AssetsCdnProps = {
   allowedEmailDomain: "example.com",
 };
 
-const PRODUCTION: AssetsCdnProps = {
+const PRODUCTION: Props = {
   ...BASE,
   envName: "master",
   isProduction: true,
@@ -32,18 +35,27 @@ const PRODUCTION: AssetsCdnProps = {
   budgetAlertEmail: "alerts@example.com",
 };
 
-function synth(props: AssetsCdnProps) {
+function synth(props: Props) {
   // Skip esbuild: these tests check the template, not the bundle.
   const app = new App({ context: { "aws:cdk:bundling-stacks": [] } });
   const stack = new Stack(app, "Assets", { env: { account: "111111111111", region: "us-west-2" } });
-  const assets = new AssetsCdn(stack, "AssetsCdn", props);
+  const contentTable = dynamodb.Table.fromTableName(stack, "Content", "Content-test");
+  const assets = new AssetsCdn(stack, "AssetsCdn", { ...props, contentTable });
   return { assets, template: Template.fromStack(stack) };
 }
 
-function behavior(template: Template, pattern: string) {
-  const [distribution] = Object.values(template.findResources("AWS::CloudFront::Distribution"));
-  const config = distribution!.Properties.DistributionConfig;
-  return config.CacheBehaviors.find((b: { PathPattern: string }) => b.PathPattern === pattern);
+/** The distribution whose comment starts with `Content Forge <kind> (`. */
+function distributionConfig(template: Template, kind: "assets" | "demos") {
+  const configs = Object.values(template.findResources("AWS::CloudFront::Distribution")).map(
+    (d) => d.Properties.DistributionConfig,
+  );
+  const config = configs.find((c) => String(c.Comment).startsWith(`Content Forge ${kind} (`));
+  if (!config) throw new Error(`no ${kind} distribution`);
+  return config;
+}
+
+function behavior(template: Template, pattern: string, kind: "assets" | "demos" = "assets") {
+  return distributionConfig(template, kind).CacheBehaviors.find((b: { PathPattern: string }) => b.PathPattern === pattern);
 }
 
 describe.each([
@@ -104,10 +116,11 @@ describe.each([
         },
       }),
     });
-    const [distribution] = Object.values(template.findResources("AWS::CloudFront::Distribution"));
-    const config = distribution!.Properties.DistributionConfig;
-    for (const b of [config.DefaultCacheBehavior, ...config.CacheBehaviors]) {
-      expect(b.ResponseHeadersPolicyId).toBeDefined();
+    for (const kind of ["assets", "demos"] as const) {
+      const config = distributionConfig(template, kind);
+      for (const b of [config.DefaultCacheBehavior, ...config.CacheBehaviors]) {
+        expect(b.ResponseHeadersPolicyId).toBeDefined();
+      }
     }
   });
 
@@ -217,6 +230,75 @@ describe.each([
       Value: Match.objectLike({ Ref: Match.anyValue() }),
     });
   });
+
+  describe("demo host (research R20)", () => {
+    it("serves demos from its own cloudfront.net host, confined to d/ and signed cookies", () => {
+      const config = distributionConfig(template, "demos");
+      expect(config.Aliases).toBeUndefined();
+      expect(config.ViewerCertificate).toBeUndefined();
+      expect(config.PriceClass).toBe("PriceClass_100");
+      expect(config.Origins).toHaveLength(1);
+      expect(config.Origins[0].OriginPath).toBe("/d");
+      expect(config.Origins[0].OriginAccessControlId).toBeDefined();
+      expect(config.DefaultCacheBehavior).toMatchObject({
+        ViewerProtocolPolicy: "https-only",
+        AllowedMethods: ["GET", "HEAD"],
+        TrustedKeyGroups: [expect.anything()],
+        CachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
+      });
+      expect(config.CacheBehaviors.map((b: { PathPattern: string }) => b.PathPattern)).toEqual(["/_launch/*"]);
+    });
+
+    it("answers /_launch/* with the launch function, without a key group or caching", () => {
+      const launch = behavior(template, "/_launch/*", "demos");
+      expect(launch.TrustedKeyGroups).toBeUndefined();
+      expect(launch.ViewerProtocolPolicy).toBe("https-only");
+      expect(launch.CachePolicyId).toBe("4135ea2d-6df8-44a3-9df3-4b5a84be39ad");
+      expect(launch.FunctionAssociations).toEqual([
+        { EventType: "viewer-request", FunctionARN: expect.anything() },
+      ]);
+      template.hasResourceProperties("AWS::CloudFront::Function", {
+        FunctionCode: Match.stringLikeRegexp("Path=/' \\+ id \\+ '/; Secure; HttpOnly; SameSite=Lax"),
+        FunctionConfig: Match.objectLike({ Runtime: "cloudfront-js-2.0" }),
+      });
+    });
+
+    it("never routes demos through the asset host", () => {
+      const assets = distributionConfig(template, "assets");
+      for (const b of assets.CacheBehaviors) expect(b.PathPattern).not.toMatch(/^\/d\//);
+      for (const origin of assets.Origins) expect(origin.OriginPath ?? "").toBe("");
+    });
+
+    it("denies the demo distribution any object outside d/", () => {
+      const statements = Object.values(template.findResources("AWS::S3::BucketPolicy")).flatMap(
+        (p) => p.Properties.PolicyDocument.Statement,
+      );
+      const deny = statements.find((st: { Sid?: string }) => st.Sid === "DemosDistributionReadsOnlyDemos");
+      expect(deny).toMatchObject({
+        Effect: "Deny",
+        Action: "s3:GetObject",
+        Principal: { Service: "cloudfront.amazonaws.com" },
+        NotResource: { "Fn::Join": ["", [expect.anything(), "/d/*"]] },
+      });
+      expect(JSON.stringify(deny.Condition)).toContain("DemosDistribution");
+    });
+
+    it("lets the session function sign for the demo host and read catalog items, nothing more", () => {
+      template.hasResourceProperties("AWS::Lambda::Function", {
+        Environment: {
+          Variables: Match.objectLike({
+            DEMOS_DOMAIN: { "Fn::GetAtt": [Match.stringLikeRegexp("^AssetsCdnDemosDistribution"), "DomainName"] },
+            CONTENT_TABLE: "Content-test",
+          }),
+        },
+      });
+      const dynamo = Object.values(template.findResources("AWS::IAM::Policy"))
+        .flatMap((p) => p.Properties.PolicyDocument.Statement)
+        .filter((st: { Action: string | string[] }) => [st.Action].flat().some((a) => a.startsWith("dynamodb:")));
+      expect(dynamo).toHaveLength(1);
+      expect(dynamo[0].Action).toBe("dynamodb:GetItem");
+    });
+  });
 });
 
 describe("AssetsCdn production only", () => {
@@ -273,8 +355,9 @@ describe("AssetsCdn sandbox only", () => {
   it("has no budget, alias, or DNS record", () => {
     template.resourceCountIs("AWS::Budgets::Budget", 0);
     template.resourceCountIs("AWS::Route53::RecordSet", 0);
-    const [distribution] = Object.values(template.findResources("AWS::CloudFront::Distribution"));
-    expect(distribution!.Properties.DistributionConfig.Aliases).toBeUndefined();
+    for (const kind of ["assets", "demos"] as const) {
+      expect(distributionConfig(template, kind).Aliases).toBeUndefined();
+    }
   });
 
   it("issues cross-site cookies for localhost", () => {
@@ -286,7 +369,7 @@ describe("AssetsCdn sandbox only", () => {
   it("reports the distribution's own domain as the asset host", () => {
     template.hasResourceProperties("AWS::SSM::Parameter", {
       Name: "/content-forge/sandbox-test/assets/domain",
-      Value: { "Fn::GetAtt": [Match.stringLikeRegexp("Distribution"), "DomainName"] },
+      Value: { "Fn::GetAtt": [Match.stringLikeRegexp("^AssetsCdnDistribution"), "DomainName"] },
     });
   });
 });

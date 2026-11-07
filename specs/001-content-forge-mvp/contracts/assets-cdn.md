@@ -1,16 +1,23 @@
-# Contract: Assets CDN & Session Endpoint (`assets.example.com`)
+# Contract: Assets CDN, Demo Host & Session Endpoint
 
-**Consumers**: web app (images, video, demos, downloads), browsers opening demos
-**Provider**: `amplify/custom/assets-cdn/` (CloudFront + S3 + session Lambda). See research R6–R8.
+**Consumers**: web app (images, video, demo launch links, downloads), browsers opening demos
+**Provider**: `amplify/custom/assets-cdn/` (two CloudFront distributions + S3 + session Lambda). See
+research R6–R8 and R20.
+
+Two hosts:
+- **Asset host** `assets.example.com`: previews, archives, and the session endpoint.
+- **Demo host**: the demo distribution's own `*.cloudfront.net` name, in every environment. Template
+  demos only. See "Demo host" below.
 
 ## Path behaviors
 
 | Path | Origin | Access | Caching | Notes |
 |---|---|---|---|---|
-| `/v/*` | S3 (OAC) | **Signed cookies** (custom policy, resource `https://assets.example.com/v/*`) | Optimized, honors object `Cache-Control` | Thumbnails, previews, video clips, demos |
+| `/v/*` | S3 (OAC) | **Signed cookies** (custom policy, resource `https://assets.example.com/v/*`) | Optimized, honors object `Cache-Control` | Thumbnails, previews, video clips. No demos |
 | `/a/*` | S3 (OAC) | **Signed URL only** (canned policy, ≤ 300 s) | Disabled | Original archives. Cookies alone get `403` |
 | `/_session` | Lambda function URL (OAC, `AWS_IAM`) | `X-Id-Token` header | Disabled | Issues cookies |
 | `/_session/signout` | same | none | Disabled | Clears cookies |
+| `/_session/demo/<id>` | same | `X-Id-Token` header | Disabled | Returns a demo launch link |
 | anything else | — | — | — | `403` |
 
 - HTTPS only, with no HTTP redirect (`https-only`: a plain-HTTP request carrying a signed URL or
@@ -19,15 +26,8 @@
   `X-Content-Type-Options: nosniff`.
 - The default behavior is denied twice: a CloudFront Function answers `403`, and the trusted key
   group would refuse an unsigned request anyway.
-- Demo pages under `/v/<id>/demo/**` are third-party code. They're same-site with the app but
-  **cross-origin**, so they can't read `content.example.com` storage. The app sets no cookies on
-  `.example.com`.
-- **Accepted risk (2026-11-07):** because demo scripts run on `assets.example.com`, a malicious
-  template could set cookies on `.example.com`, send same-site requests to other `*.example.com`
-  apps, show a fake sign-in page on a trusted host, or read other catalog previews. Serving demos
-  from a separate registrable domain would remove this; the owner chose not to. Import only
-  templates from trusted marketplaces. A restrictive CSP on `/v/*/demo/*` is a possible later
-  mitigation, to be tested on a sandbox first.
+- The asset host never serves template code: `d/` objects have no behavior here and fall to the
+  default `403`.
 
 ## `GET /_session`
 
@@ -63,6 +63,50 @@ Sent with `fetch(url, { credentials: 'include', headers: { 'X-Id-Token': idToken
 `Access-Control-Allow-Methods: GET`, `Access-Control-Expose-Headers: X-Session-Expires`,
 `Vary: Origin`. Preflight `OPTIONS` → `204`.
 
+## `GET /_session/demo/<id>`
+
+Returns a launch link for one published item's demo. `<id>` is the content `id`
+(`[A-Za-z0-9-]{1,64}`).
+
+**Request**: as for `/_session` (same `Origin` and `X-Id-Token`, same validation steps 1–3). Then
+the Lambda reads the item's `status` and `demoEntryPath` from the catalog table (`GetItem`, nothing
+else).
+
+**Responses**
+
+| Status | When | Body |
+|---|---|---|
+| `200` | Valid, published, has a demo | `{"url":"https://<demo host>/_launch/<id>/<entry>?p=…&s=…&k=…","expiresAt":"<ISO time>"}`. `p`, `s`, `k` are the three cookie values, signed for `https://<demo host>/<id>/*` with a 12 h custom policy. Each entry path segment is percent-encoded. `Cache-Control: no-store` |
+| `401`, `403` | As for `/_session` | As for `/_session` |
+| `404` | No such item, a draft, or no `demoEntryPath` | `{"error":"not_found"}` |
+| `500` | Catalog or signing failure, or a stored entry path that isn't a plain relative path | `{"error":"internal"}` (logged) |
+
+No cookies are set on the asset host.
+
+## Demo host
+
+| Path | Origin | Access | Caching | Notes |
+|---|---|---|---|---|
+| `/_launch/<id>/<entry>` | none: a CloudFront Function answers | the query carries the signed values | Disabled | `302` to `/<id>/<entry>`, setting the three cookies. Bad input: `400` |
+| everything else (`/<id>/**`) | S3 (OAC), origin path `/d` | **Signed cookies** scoped to the demo | Optimized, honors object `Cache-Control` | Template files from `d/<id>/**` |
+
+- **Launch cookies**: `CloudFront-Policy`, `CloudFront-Signature`, `CloudFront-Key-Pair-Id`, each
+  host-only, `Path=/<id>/; Secure; HttpOnly; SameSite=Lax; Max-Age=43200`. They're set during a
+  top-level navigation, so they're first-party in every browser. Only that demo's requests carry
+  them.
+- The function accepts only `^/_launch/[A-Za-z0-9-]{1,64}/[^/\\].*$` and cookie values matching
+  CloudFront's URL-safe base64 (`[A-Za-z0-9_~-]`). The redirect always starts with `/<id>/`, so it
+  can't leave the host.
+- HTTPS only, HSTS, and `nosniff`, as on the asset host. No custom domain or certificate.
+- A bucket policy statement denies this distribution any object outside `d/`.
+- **Expiry**: after 12 hours, demo requests get `403`. Reopening the demo from the app issues new
+  cookies. Signing out of the app doesn't clear them (they belong to another site); they expire.
+- **Isolation** (research R20): `*.cloudfront.net` is a public suffix, so the demo host is a
+  separate site from `example.com`. Template code can't read the app's tokens, call the catalog or
+  download services as the user, set cookies on `example.com`, or send same-site requests to the
+  owner's other hosts. Demos share one origin, so a demo can read another demo the user opened in
+  the last 12 hours (FR-027 allows this).
+
 ## `GET /_session/signout`
 
 Returns `204` and sets the same three cookies with `Max-Age=0`. Called with
@@ -70,7 +114,8 @@ Returns `204` and sets the same three cookies with `Max-Age=0`. Called with
 
 ## Environments
 
-This contract describes production. Personal sandboxes (research R19) differ only in:
+This contract describes production. The demo host is the same in every environment. Personal
+sandboxes (research R19) differ only in:
 
 - **host**: the distribution's own `*.cloudfront.net` domain, which `custom.assetsBaseUrl` reports;
 - **cookies**: `SameSite=None` instead of `Lax`, because `localhost` is cross-site;
@@ -86,7 +131,12 @@ from `assetsBaseUrl` and never hard-code the host.
 - Re-call it when `X-Session-Expires` is less than 60 min away (checked on focus and every 15 min),
   and once after the first asset load error. If the retry also fails, ask the user to sign in again
   (FR-029).
-- Open demos with
-  `window.open('<assetsBaseUrl>/v/<id>/demo/<demoEntryPath>', '_blank', 'noopener')`.
+- Open demos through a launch link, never a built URL:
+  1. In the click handler, synchronously open `const tab = window.open('', '_blank')`, so the
+     browser doesn't treat it as a popup, and set `tab.opener = null`, so the demo can't navigate
+     the app's tab.
+  2. Fetch `<assetsBaseUrl>/_session/demo/<id>` with `X-Id-Token`, as for `/_session`.
+  3. On `200`, set `tab.location.href = url`. On an error, close the tab and show the error. Never
+     store or log the URL.
 - Build image URLs only through the `next/image` custom loader (`src/lib/assets/image-loader.ts`):
   `(src, width) → <assetsBaseUrl>/<thumbKeys[nearest(width)]>`.

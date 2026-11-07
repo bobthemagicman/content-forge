@@ -28,6 +28,8 @@ export interface AssetsCdnProps {
   allowedOrigins: string[];
   /** Only ID tokens for `@<allowedEmailDomain>` get a session (FR-001). */
   allowedEmailDomain: string;
+  /** The catalog table: the session function reads an item's status and demo entry path from it. */
+  contentTable: dynamodb.ITable;
   /** Production only: `assets.<domain>`. */
   assetsDomain?: string;
   /** Production only: the us-east-1 certificate for `assetsDomain` (infra/edge-cert, research R10). */
@@ -61,16 +63,21 @@ function productionSettings(scope: Construct, props: AssetsCdnProps): Production
 }
 
 /**
- * The asset plane: a private bucket behind one CloudFront distribution, the signing key group, the
- * session Lambda, the download log, and the account budget (contracts/assets-cdn.md, research R6–R8).
+ * The asset plane: a private bucket behind two CloudFront distributions (assets, and demos on a
+ * separate site), the signing key group, the session Lambda, the download log, and the account
+ * budget (contracts/assets-cdn.md, research R6–R8, R20).
  */
 export class AssetsCdn extends Construct {
   readonly bucket: s3.Bucket;
   readonly distribution: cloudfront.Distribution;
+  /** Template demos, on the distribution's own `*.cloudfront.net` host in every environment (R20). */
+  readonly demosDistribution: cloudfront.Distribution;
   readonly downloadEventsTable: dynamodb.Table;
   readonly sessionFunction: NodejsFunction;
   /** `https://<asset host>`; reported to the app as `custom.assetsBaseUrl`. */
   readonly assetsBaseUrl: string;
+  /** `https://<demo host>`. The app never builds demo URLs; launch links come from `/_session/demo`. */
+  readonly demosBaseUrl: string;
   /** SSM parameters the session and download functions read at runtime (research R8, R19). */
   readonly parameterNames: { assetsDomain: string; keyPairId: string; privateKey: string };
 
@@ -110,6 +117,75 @@ export class AssetsCdn extends Construct {
     });
     const keyGroup = new cloudfront.KeyGroup(this, "KeyGroup", { items: [publicKey] });
 
+    const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, "SecurityHeaders", {
+      comment: "Content Forge assets: HSTS and no MIME sniffing",
+      securityHeadersBehavior: {
+        contentTypeOptions: { override: true },
+        strictTransportSecurity: { accessControlMaxAge: Duration.days(365), includeSubdomains: false, override: true },
+      },
+    });
+
+    // --- Demo distribution (research R20) -----------------------------------------------------
+    // Third-party template code, so it gets a site of its own: `*.cloudfront.net` is on the Public
+    // Suffix List, so this host shares no cookies or same-site trust with the owner's domain.
+    // Adding a demo is only an upload under d/<id>/; nothing here changes per demo.
+    const demoLaunch = new cloudfront.Function(this, "DemoLaunchFunction", {
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      comment: "Content Forge: launch link to per-demo signed cookies",
+      code: cloudfront.FunctionCode.fromFile({ filePath: fileURLToPath(new URL("./demo-launch.js", import.meta.url)) }),
+    });
+    // The origin path confines this distribution to d/, so demo URLs are /<id>/<path>.
+    const demoOrigin = origins.S3BucketOrigin.withOriginAccessControl(this.bucket, { originPath: "/d" });
+    this.demosDistribution = new cloudfront.Distribution(this, "DemosDistribution", {
+      comment: `Content Forge demos (${props.envName})`,
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      defaultBehavior: {
+        origin: demoOrigin,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+        trustedKeyGroups: [keyGroup],
+        responseHeadersPolicy: securityHeaders,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      additionalBehaviors: {
+        // Answered entirely by the function, which never reaches the origin. No key group: the
+        // request carries the values that become the cookies.
+        "/_launch/*": {
+          origin: demoOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+          responseHeadersPolicy: securityHeaders,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          functionAssociations: [{ function: demoLaunch, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+        },
+      },
+    });
+    const demosHost = this.demosDistribution.distributionDomainName;
+    this.demosBaseUrl = `https://${demosHost}`;
+
+    // Belt and braces for the origin path: the demo distribution can't read outside d/, whatever
+    // path reaches S3.
+    this.bucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: "DemosDistributionReadsOnlyDemos",
+        effect: iam.Effect.DENY,
+        principals: [new iam.ServicePrincipal("cloudfront.amazonaws.com")],
+        actions: ["s3:GetObject"],
+        notResources: [this.bucket.arnForObjects("d/*")],
+        conditions: {
+          StringEquals: {
+            "AWS:SourceArn": stack.formatArn({
+              service: "cloudfront",
+              region: "",
+              resource: "distribution",
+              resourceName: this.demosDistribution.distributionId,
+            }),
+          },
+        },
+      }),
+    );
+
     // --- Session function ---------------------------------------------------------------------
     const sessionLogs = new logs.LogGroup(this, "SessionLogs", {
       retention: logs.RetentionDays.TWO_WEEKS,
@@ -134,6 +210,8 @@ export class AssetsCdn extends Construct {
         ASSETS_DOMAIN_PARAM: this.parameterNames.assetsDomain,
         PRIVATE_KEY_PARAM: this.parameterNames.privateKey,
         KEY_PAIR_ID_PARAM: this.parameterNames.keyPairId,
+        DEMOS_DOMAIN: demosHost,
+        CONTENT_TABLE: props.contentTable.tableName,
       },
       // Bundle the SDK too: the signer isn't in the Lambda runtime, and pinning everything keeps
       // the deployed code identical to what the tests ran against.
@@ -157,6 +235,10 @@ export class AssetsCdn extends Construct {
         conditions: { StringEquals: { "kms:EncryptionContext:PARAMETER_ARN": privateKeyArn } },
       }),
     );
+    // An item's status and demo entry path, for demo launch links. Nothing else in the catalog.
+    this.sessionFunction.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ["dynamodb:GetItem"], resources: [props.contentTable.tableArn] }),
+    );
     const sessionUrl = this.sessionFunction.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.AWS_IAM });
 
     // --- Distribution -------------------------------------------------------------------------
@@ -167,13 +249,6 @@ export class AssetsCdn extends Construct {
       code: cloudfront.FunctionCode.fromInline(
         "function handler(event) { return { statusCode: 403, statusDescription: 'Forbidden' }; }",
       ),
-    });
-    const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, "SecurityHeaders", {
-      comment: "Content Forge assets: HSTS and no MIME sniffing",
-      securityHeadersBehavior: {
-        contentTypeOptions: { override: true },
-        strictTransportSecurity: { accessControlMaxAge: Duration.days(365), includeSubdomains: false, override: true },
-      },
     });
     const sessionRequests = new cloudfront.OriginRequestPolicy(this, "SessionRequests", {
       comment: "Content Forge /_session: forward the ID token and Origin only",
@@ -206,7 +281,8 @@ export class AssetsCdn extends Construct {
         functionAssociations: [{ function: denyAll, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
       },
       additionalBehaviors: {
-        // Previews, clips, and demos: signed cookies; keys are content-hashed, so cache hard.
+        // Thumbnails, previews, and clips: signed cookies; keys are content-hashed, so cache hard.
+        // Demos are never served here: they live under d/, which only the demo distribution reads.
         "/v/*": { ...signedOnly, cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED },
         // Original archives: signed URLs only (the cookie policy covers /v/* alone), never cached.
         "/a/*": { ...signedOnly, cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED },

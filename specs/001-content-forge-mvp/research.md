@@ -147,14 +147,15 @@ they're the first tasks of implementation.
   - A custom CDK construct `AssetsCdn` in `backend.createStack('assets')` owns:
     - the **S3 bucket**: block public access, Intelligent-Tiering lifecycle for `a/`, SSE-S3;
     - the **CloudFront distribution**: OAC to S3, custom domain + ACM cert from R10, Route 53 alias;
+    - the **demo distribution** on its own `*.cloudfront.net` host (R20);
     - the **trusted key group**;
     - the **session Lambda** + function URL;
     - the **`DownloadEvents` table**;
     - an **AWS Budget** ($5/month, created only in the `master` environment; see R19);
     - log retention.
   - Behaviors:
-    - `/v/*` (previews + demos): trusted key group, CachingOptimized, long TTL. Keys are
-      content-hashed (R14), so objects are immutable.
+    - `/v/*` (previews): trusted key group, CachingOptimized, long TTL. Keys are content-hashed
+      (R14), so objects are immutable. Demos aren't served here (R20).
     - `/a/*` (archives): trusted key group, CachingDisabled, so archives are never cached at the edge.
     - `/_session*`: Lambda function URL origin with OAC, CachingDisabled. The origin request policy
       forwards `X-Id-Token` and `Origin`. A response headers policy sends CORS for
@@ -169,7 +170,8 @@ they're the first tasks of implementation.
 - **Alternatives considered**:
   - Amplify Storage `getUrl()` presigned S3 URLs: thumbnails can't be cached because each URL is
     unique, and egress is billed at S3 rates.
-  - Two distributions: more resources for no isolation gain.
+  - Separate distributions for previews and archives: more resources for no isolation gain. (Demos
+    are the exception: they need a separate site, R20.)
 
 ## R7. Asset session endpoint (signed cookies)
 
@@ -187,8 +189,8 @@ they're the first tasks of implementation.
 - **Rationale**:
   - Cookies for `assets.` have to be set by a response from `assets.`.
   - `content.` and `assets.` are **same-site** (same registrable domain), so `SameSite=Lax` cookies
-    are first-party and get sent on `<img>`, `<video>` and new-tab demo requests. That avoids
-    third-party-cookie blocking.
+    are first-party and get sent on `<img>` and `<video>` requests. That avoids third-party-cookie
+    blocking.
   - The token travels in a custom header because OAC signs the origin request with SigV4 in the
     `Authorization` header, so a viewer's `Authorization` header can't reach the origin.
   - Using GET means there's no request body, which avoids OAC's payload-hash requirement for Lambda
@@ -398,7 +400,7 @@ they're the first tasks of implementation.
 | AppSync | < 100k requests | ≤ $0.40 |
 | DynamoDB on-demand (2 tables) | Tiny reads/writes, < 25 GB | ≤ $0.10 |
 | Lambda (3 functions) | < 100k invocations | $0 (always-free tier) |
-| CloudFront | < 1 TB transfer, < 10M requests | $0 (always-free tier) |
+| CloudFront (2 distributions, 2 functions) | < 1 TB transfer, < 10M requests, < 2M function invocations, shared across both | $0 (always-free tier) |
 | SSM Parameter Store (standard) | 2–4 params | $0 |
 | Route 53 | Existing zone, alias queries free | $0 incremental |
 | ACM certificate | Public cert | $0 |
@@ -454,6 +456,7 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
   | Asset domain | `assets.example.com`: custom domain, us-east-1 cert, Route 53 alias | The distribution's own `*.cloudfront.net` domain. No cert, no DNS record |
   | Asset cookies | Host-only, `Path=/v/; SameSite=Lax` (same-site) | Host-only, `Path=/v/; SameSite=None; Secure; HttpOnly` (cross-site) |
   | `/_session` allowed origin | `https://content.example.com` | `http://localhost:3000` |
+  | Demo host | The demo distribution's own `*.cloudfront.net` domain (R20) | The same, per sandbox |
   | Signing keys | `/content-forge/master/...`, `keys/master.public-key.pem` | `/content-forge/sandbox-<user>/...`, `keys/sandbox-<user>.public-key.pem` |
   | AWS Budget | Yes (one per account covers all environments) | No |
   | CSP headers | Yes (R18) | None (`next dev`) |
@@ -470,9 +473,70 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
     be sent from local development.
   - A budget is account-wide. Creating it per environment would fail on the duplicate name.
 - **Known limitation**: sandbox previews rely on third-party cookies. Browsers that block them
-  (Safari, Firefox in strict mode) won't show sandbox previews or demos. Use Chrome for local
-  development. Production isn't affected.
+  (Safari, Firefox in strict mode) won't show sandbox previews. Use Chrome for local development.
+  Production isn't affected, and demos work everywhere: their cookies are first-party (R20).
 - **Alternatives considered**:
   - Per-sandbox subdomains (`<user>.assets.example.com`): still cross-site from `localhost`,
     plus a cert and DNS record for each.
   - One shared key pair: a sandbox function could then sign cookies production accepts.
+
+## R20. Demo isolation: a separate site for template code
+
+- **Decision**:
+  - Template demos are served by a **second CloudFront distribution on its own `*.cloudfront.net`
+    host**, in every environment, never a subdomain of the owner's domain. Its only origin is the
+    asset bucket with origin path `/d`, so demo URLs are `https://<demo host>/<id>/<path>` →
+    S3 `d/<id>/<path>`. A bucket policy statement also denies it any object outside `d/`.
+  - The asset host stops serving demos. Previews stay on `assets.example.com`, where same-site
+    cookies work in every browser (R7).
+  - **Opening a demo** (contracts/assets-cdn.md):
+    1. The app calls `GET https://assets.example.com/_session/demo/<id>` with the ID token, as for
+       `/_session`. The session function checks the token, the domain and the `Origin`, then reads
+       the item: it must be published and have a `demoEntryPath`, otherwise `404`.
+    2. It signs a custom policy for `https://<demo host>/<id>/*` (12 h) and returns a launch link,
+       `https://<demo host>/_launch/<id>/<entry>?p=…&s=…&k=…`, carrying the three cookie values.
+    3. The app opens the link in a new tab. A CloudFront Function on `/_launch/*` sets the values as
+       cookies scoped to `Path=/<id>/` and redirects to `/<id>/<entry>`. It verifies nothing:
+       CloudFront checks the cookies against the key group on every demo request.
+  - Cookies: host-only, `Path=/<id>/; Secure; HttpOnly; SameSite=Lax`, 12 h, the same lifetime as
+    the preview session.
+- **Rationale**:
+  - `cloudfront.net` is on the Public Suffix List, so each distribution host is its own site. A
+    hostile template can no longer set cookies on the owner's domain, send same-site requests to
+    the company's other apps, or phish on a company hostname. That replaces the accepted risk
+    recorded on 2026-11-07 (constitution 1.1.0, Principle II).
+  - The cookies are set during a top-level navigation to the demo host, so they're first-party in
+    every browser, including Safari and Firefox, which block or partition third-party cookies. A
+    cookie handed out by the app's `fetch` would have been third-party.
+  - **Automatable** (constitution Principle III): adding a demo is an upload under `d/<id>/` and a
+    `demoEntryPath` on the record. Nothing about the distributions, DNS or certificates changes per
+    demo, and the design doesn't depend on the content type, so other types can get hosted demos
+    the same way.
+  - Per-demo cookie paths mean a demo only receives its own cookies. Demos share one origin, so a
+    demo can still read another demo the user opened in the last 12 hours, which FR-027 allows.
+  - 12 hours, not shorter: a demo tab has no token, so it can't renew its own cookies, and FR-029
+    requires open demos to keep working through a session. Reopening a demo from the app renews it.
+  - No new secret, Lambda, or endpoint on the demo host: the same key group verifies both hosts,
+    and every policy names its host, so a preview cookie can't open a demo or the reverse.
+  - Cost: $0. Both distributions and both functions share CloudFront's always-free allowance (R17).
+- **Residual risks**:
+  - A launch link is a bearer credential for that one demo until it expires. It lives only in the
+    app's memory and the new tab's first request, and the redirect keeps it out of history and
+    referrers.
+  - Templates share the demo origin's storage (`localStorage`, cookies they set themselves). A
+    template could break another template's demo, which costs nothing but a reopen.
+  - Phishing is still possible on the demo host, but on a random `*.cloudfront.net` name that
+    carries no company trust.
+- **Alternatives considered**:
+  - A separate registrable domain: the same isolation for about $15 a year, and a domain to keep.
+  - Each demo in its own Amplify Hosting app on `*.amplifyapp.com` (also a public suffix, so
+    per-demo sites): static Amplify apps have no server-side access control beyond a shared
+    password, so the demo would be public to anyone with the URL, and the app's tokens would have
+    to be handed to the demo origin, where template code could read them. Also 25 apps per region
+    by default.
+  - One distribution per demo: per-demo sites with server-side checks, but ingest would create
+    CloudFront resources per item (minutes each, a quota of about 200), against the automation
+    rule.
+  - A CSP `sandbox` header on demos: doesn't remove the shared site, and would likely stop the
+    demo's own files from loading, because a sandboxed page's requests count as cross-site.
+

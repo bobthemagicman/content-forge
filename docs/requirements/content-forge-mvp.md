@@ -120,9 +120,9 @@ Content Forge is a private web catalog for the owner's personally purchased digi
   - sets CloudFront signed cookies scoped to `https://assets.example.com/v/*`, valid for 12 hours;
   - restricts CORS to `https://content.example.com`.
 - [ ] The app refreshes the cookies before they expire, and again after any `403` from the assets domain.
-- [ ] The Live Demo button opens `https://assets.example.com/v/<contentId>/demo/<demoEntryPath>` in a new tab.
+- [ ] The Live Demo button asks `https://assets.example.com/_session/demo/<contentId>` for a launch link and opens it in a new tab. The link sets cookies for that demo only on the demo host, a `*.cloudfront.net` name that's a separate site from `example.com` (research R20).
 - [ ] Relative CSS/JS/image paths inside templates resolve correctly.
-- [ ] Demo JavaScript runs on `assets.`, a **different origin** from the app (`content.`). The app's Cognito tokens live in the app origin's storage, so demo code can't read them. The app never sets cookies on `.example.com`.
+- [ ] Demo JavaScript runs on the demo host, a **different site** from the app (`content.`) and from every `example.com` host. The app's Cognito tokens live in the app origin's storage, so demo code can't read them, and it can't set cookies on `.example.com` or send same-site requests to it.
 - [ ] Archives (`/a/*`) are **not** covered by the cookie. They require a per-file signed URL (FR-5).
 - [ ] Items that can't run as static files (WordPress themes, templates that need a build step) have no hosted demo. *(Should)* They fall back to `externalDemoUrl`.
 
@@ -282,8 +282,12 @@ content.example.com
 assets.example.com   (CloudFront → S3 via OAC; trusted key group on /v/* and /a/*)
   /_session               Lambda function URL: Cognito token → signed cookies for /v/*
   /v/<id>/thumb-320.webp, /v/<id>/preview-<n>.webp, /v/<id>/preview.mp4
-  /v/<id>/demo/...        Unzipped website template
   /a/<id>/<file>          Original archive (per-file signed URL only)
+  /_session/demo/<id>     Launch link for one demo
+
+d<random>.cloudfront.net  (demo distribution → S3 d/ via OAC; per-demo signed cookies)
+  /_launch/<id>/<entry>   CloudFront Function: launch link → cookies → redirect
+  /<id>/...               Unzipped website template
 ```
 
 ### Data Models (Amplify Data)
@@ -301,7 +305,7 @@ assets.example.com   (CloudFront → S3 via OAC; trusted key group on /v/* and /
 | purchaseDate, publishedAt | Date / DateTime | |
 | archiveKey, archiveFileName | String! | `a/<id>/<file>` |
 | archiveBytes | Int | |
-| demoEntryPath | String | Relative to `v/<id>/demo/`; null = no hosted demo |
+| demoEntryPath | String | Relative to `d/<id>/`; null = no hosted demo |
 | thumbKey, previewKeys, videoPreviewKey | String / [String] | |
 | meta | JSON | duration, resolution, slideCount, dimensions, fileList |
 | downloadCount | Int | Atomic increment by download Lambda |

@@ -85,7 +85,7 @@ container.
 
 | Key | Example | Consumers |
 |---|---|---|
-| `assetsBaseUrl` | `https://assets.example.com` (sandboxes: `https://<id>.cloudfront.net`) | Web app (image loader, demo links, session) |
+| `assetsBaseUrl` | `https://assets.example.com` (sandboxes: `https://<id>.cloudfront.net`) | Web app (image loader, session, demo launch links via `/_session/demo/<id>`) |
 | `assetsBucketName` | `content-forge-assets-master` | Ingest CLI |
 | `contentTableName` | `Content-<apiId>-NONE` | Ingest CLI |
 | `region` | `us-west-2` | Ingest CLI |

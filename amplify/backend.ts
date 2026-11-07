@@ -58,6 +58,7 @@ const assets = new AssetsCdn(backend.createStack("assets"), "AssetsCdn", {
   userPoolClientId: backend.auth.resources.userPoolClient.userPoolClientId,
   allowedOrigins: [isProduction ? APP_ORIGIN : LOCAL_ORIGIN],
   allowedEmailDomain: ALLOWED_EMAIL_DOMAIN,
+  contentTable: backend.data.resources.tables["Content"],
   ...(isProduction && {
     assetsDomain: ASSETS_DOMAIN,
     certificateArn: process.env.ASSETS_CERT_ARN,
