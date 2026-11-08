@@ -59,23 +59,24 @@ they're the first tasks of implementation.
 ## R3. Authentication: Cognito + Google Workspace
 
 - **Decision**:
-  - `defineAuth` with Google as an **OIDC provider** named `GoogleWorkspace` (issuer
-    `https://accounts.google.com`, `clientId`/`clientSecret` from Amplify `secret()`), scopes
+  - A Cognito user pool in the auth account (R21), deployed by `infra/auth`, with Google as an
+    **OIDC provider** named `GoogleWorkspace` (issuer `https://accounts.google.com`, client ID and
+    secret from Secrets Manager), scopes
     `openid email profile`, and `attributeMapping` for email, `email_verified`, name, picture, and
     Google's hosted-domain claim `hd` → custom attribute `custom:hd`. The app signs in with
     `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })`.
-  - Callback URL `https://content.example.com/auth/callback/` plus a localhost equivalent for
-    sandboxes. Logout URL `/`.
-  - A `preSignUp` trigger (`amplify/auth/pre-sign-up/`) admits only `PreSignUp_ExternalProvider`
+  - Callback URL `https://content.example.com/auth/callback/` on the `prod` pool, and
+    `http://localhost:3000/auth/callback/` on the `dev` pool that sandboxes share (R21). Logout URL
+    `/`.
+  - A `preSignUp` trigger (`infra/auth/lib/pre-sign-up.ts`) admits only `PreSignUp_ExternalProvider`
     sign-ups whose `custom:hd` is `example.com`, whose email ends in `@example.com`, and whose
     email isn't unverified. Every other trigger source is refused.
   - The session function (R7) repeats the `custom:hd` check on every asset session and demo launch,
     so it also covers sign-ins after the first: Cognito rewrites mapped attributes each time.
   - The Google OAuth consent screen is set to **Internal** (defense in depth).
-  - Self-service sign-up is turned off (`allowAdminCreateUserOnly: true` through a CDK override), and
-    the UI only calls `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })`.
-  - The app client gives out tokens only through Google (CDK overrides, checked by
-    `tests/infra/auth-client.test.ts`):
+  - Self-service sign-up is turned off (`selfSignUpEnabled: false`), and the UI only calls `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })`.
+  - The app client gives out tokens only through Google (`infra/auth/lib/auth-stack.ts`, checked by
+    `tests/infra/auth-stack.test.ts`):
     - the only identity provider is `GoogleWorkspace`, not `COGNITO`, so there's no Cognito sign-in
       form;
     - the only explicit auth flow is `ALLOW_REFRESH_TOKEN_AUTH`, so no SRP or custom auth;
@@ -445,7 +446,8 @@ they're the first tasks of implementation.
 | Resource | Basis (private, < 50 users, hundreds of items) | Est. $/month |
 |---|---|---|
 | Amplify Hosting (static) | A few builds/month, small transfer | ≤ $0.50 |
-| Cognito user pool | < 50 MAU, within free MAU | $0 |
+| Cognito user pools (auth account, R21) | < 50 MAU, within free MAU | $0 |
+| Secrets Manager (auth account, R21) | 1 secret: the Google client | $0.40 |
 | AppSync | < 100k requests | ≤ $0.40 |
 | DynamoDB on-demand (2 tables) | Tiny reads/writes, < 25 GB | ≤ $0.10 |
 | Lambda (3 functions) | < 100k invocations | $0 (always-free tier) |
@@ -602,4 +604,68 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
     rule.
   - A CSP `sandbox` header on demos: doesn't remove the shared site, and would likely stop the
     demo's own files from loading, because a sandboxed page's requests count as cross-site.
+
+## R21. The user pool in a separate AWS account
+
+- **Decision** (2026-11-08, owner's choice):
+  - Two AWS accounts:
+    - The **auth account** (the organization's) holds the user pools, the Google provider, the app
+      clients, the Cognito domains and the pre-sign-up trigger. `infra/auth` deploys them, a plain
+      CDK app like `infra/edge-cert`.
+    - The **app account** (the owner's) holds everything else: Amplify Hosting, AppSync, DynamoDB,
+      S3, CloudFront and the session function.
+  - Two pools, each in its own stack, `ContentForgeAuth-<env>`:
+    - `dev` redirects only to `http://localhost:3000` and serves every personal sandbox.
+    - `prod` redirects only to the app origin and serves `master`. Its pool is retained and
+      deletion-protected, because replacing it would delete every user.
+  - **Handover.** `scripts/auth/deploy.sh` deploys a pool and writes its region, IDs, domain and
+    redirect origin to `amplify/auth-environments/<dev|prod>.json`, which is committed. The app's
+    backend reads it at synth (`amplify/auth-environment.ts`). Synth stops if the file is missing
+    or malformed, or if its origin isn't the one this deployment serves.
+  - **AppSync** uses OIDC mode with the pool as issuer. Amplify's client sends the Cognito access
+    token in that mode, as it does in user-pool mode.
+    - There's no client ID check. Each pool has exactly one app client, and the stack test keeps
+      it that way.
+    - Tokens are refused more than an hour after issue, or more than 7 days and an hour after the
+      sign-in they come from. That's the access-token and refresh-token lifetimes again, as a
+      second check.
+  - **The session function** verifies ID tokens against the pool and client from the handover
+    file. `aws-jwt-verify` only needs the pool's public keys, so it works across accounts.
+  - **`amplify_outputs.json`** gets the same `auth` section Amplify writes for its own pool, through
+    `backend.addOutput`, so the front end is unchanged.
+  - **The Google client ID and secret** are in Secrets Manager in the auth account
+    (`content-forge/google-oauth-client`, set by `scripts/auth/set-google-secret.sh`).
+    CloudFormation reads them when it deploys the provider, so they never appear in a template.
+- **Rationale**:
+  - The owner wants the user records in the organization's account. Where the pool lives doesn't change
+    who can sign in: Google's Internal consent screen, the `hd` mapping, the pre-sign-up trigger
+    and the session function enforce that.
+  - Amplify's `referenceAuth` can't reach another account. Its deploy-time custom resource calls
+    `DescribeUserPool` with the app account's credentials, builds ARNs in its own account, and needs
+    an identity pool there too.
+  - Amplify Data's user-pool mode needs an `auth` resource in the same backend. OIDC mode only needs
+    the issuer, and Cognito publishes its discovery document and keys publicly.
+  - A plain CDK app, not a second Amplify backend: one stack per environment needs no Hosting app.
+  - Secrets Manager costs $0.40 a month, but CloudFormation's free `ssm-secure` references only work
+    in a short list of properties, and Cognito's provider details aren't on it.
+  - One `dev` pool for all sandboxes, not one each: every sandbox redirects to the same localhost
+    origin, and a pool per developer would need a deploy in the auth account for each.
+- **Consequences**:
+  - Two deploys with two AWS profiles. A pool change means deploying `infra/auth`, then the app if
+    the handover file changed.
+  - Sandboxes share the `dev` pool's users.
+  - Offboarding (quickstart §8) runs against the auth account.
+- **Still to verify on a sandbox**:
+  - that AppSync's OIDC mode accepts the pool's access tokens, including refreshed ones (T130);
+  - that a refreshed access token keeps the original `auth_time`. If it doesn't, the 7-day limit
+    above simply never triggers;
+  - quickstart V2 and V3 again, against the `dev` pool.
+  - Fallback if OIDC mode refuses the tokens: AppSync's own Cognito mode, which AWS supports for a
+    pool in another account through the API and CloudFormation (not the console), set on the API
+    with a CDK override.
+- **Alternatives considered**:
+  - Everything in the app account, the pool included: one deploy and no handover, but the user
+    records would leave the organization's account. The owner declined.
+  - A Cognito identity pool in the app account federating the auth account's user pool: that's for
+    AWS credentials, which the app never uses.
 

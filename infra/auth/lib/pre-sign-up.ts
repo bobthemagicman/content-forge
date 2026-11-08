@@ -1,10 +1,10 @@
 import type { PreSignUpTriggerHandler } from "aws-lambda";
-import { env } from "$amplify/env/pre-sign-up";
 
 /**
- * Admits only Google Workspace accounts in the allowed domain (research R3, FR-001/002). Every
- * check fails closed. Cognito redirects to the callback with the message in `error_description`,
- * which the callback page maps to "authorized accounts only".
+ * The user pool's pre-sign-up trigger (lib/auth-stack.ts). Admits only Google Workspace accounts in
+ * the allowed domain (research R3, FR-001/002). Every check fails closed. Cognito redirects to the
+ * callback with the message in `error_description`, which the callback page maps to "authorized
+ * accounts only".
  *
  * - Accounts come only from federated sign-in: any other trigger source is refused.
  * - `custom:hd` is Google's hosted-domain claim. Only Workspace accounts carry it, so a consumer
@@ -12,7 +12,7 @@ import { env } from "$amplify/env/pre-sign-up";
  * - The email must be in the domain too, and verified.
  */
 export const handler: PreSignUpTriggerHandler = async (event) => {
-  const domain = env.ALLOW_DOMAIN?.toLowerCase();
+  const domain = process.env.ALLOW_DOMAIN?.toLowerCase();
   // A missing setting must never mean "any domain".
   if (!domain) throw new Error("ONLY_ALLOWED_DOMAIN");
   if (event.triggerSource !== "PreSignUp_ExternalProvider") throw new Error("ONLY_ALLOWED_DOMAIN");

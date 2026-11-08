@@ -12,7 +12,7 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 | Need | Check |
 |---|---|
 | Node.js 24 LTS | `node -v` → `v24.x` |
-| AWS account, profile with admin rights for bootstrap | `aws sts get-caller-identity --profile <p>` |
+| Two AWS accounts (research R21), each with an admin profile for bootstrap: the **auth account** for the user pools, the **app account** for everything else. Both CDK-bootstrapped in `us-west-2` (`npx cdk bootstrap --profile <p>`) | `aws sts get-caller-identity --profile <p>` for each |
 | Route 53 hosted zone for your domain (`example.com` throughout these docs) | `aws route53 list-hosted-zones-by-name --dns-name example.com` |
 | Google Workspace admin access | Can create an **Internal** OAuth client in Google Cloud Console |
 | Ingest tools (owner machine) | `ffmpeg -version`, `soffice --version`, `pdftoppm -v`. Install the missing ones: `brew install --cask libreoffice` and `brew install poppler` |
@@ -22,7 +22,9 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 
 ## 2. One-time bootstrap (documented exceptions to "everything as code")
 
-0. **Lambda concurrency quota**: production reserves 5 concurrent executions for the session
+Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the auth account.
+
+0. **Lambda concurrency quota** (app account): production reserves 5 concurrent executions for the session
    function, and Lambda keeps 10 unreserved, so the account needs a quota of at least 15. New
    accounts often start at 10. Check **Service Quotas → AWS Lambda → Concurrent executions** in
    `us-west-2`, and request 1000 (the usual default) if it's lower. Increases are free and usually
@@ -34,12 +36,28 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
    - It writes the private key to SSM `/content-forge/master/cloudfront/private-key` (SecureString).
    - It writes the public key to `amplify/custom/assets-cdn/keys/master.public-key.pem`. Commit that
      file. Public keys aren't secret.
-3. **Google OAuth client**: a Web application client, consent screen Internal; authorized
-   redirect URI `https://<cognito-domain>/oauth2/idpresponse` (the Cognito domain appears after the
-   first deploy; update it then). Cognito registers it as the OIDC provider `GoogleWorkspace`
-   (research R3), which needs nothing extra on Google's side.
-4. **Amplify app**: connect the GitHub repo `bobthemagicman/content-forge` in `us-west-2`. Set:
-   - secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`;
+3. **Google OAuth client and user pools** (research R3, R21):
+   1. In Google Cloud, create a Web application client with the consent screen set to Internal.
+      Cognito registers it as the OIDC provider `GoogleWorkspace`, which needs nothing extra on
+      Google's side.
+   2. Store it in the auth account: `scripts/auth/set-google-secret.sh --profile <auth p>`. It
+      prompts for the client ID and secret, so neither lands in shell history.
+   3. Deploy the pools to the auth account:
+
+      ```bash
+      ALLOWED_EMAIL_DOMAIN=<domain> scripts/auth/deploy.sh --env dev --profile <auth p>
+      ALLOWED_EMAIL_DOMAIN=<domain> APP_ORIGIN=https://content.<domain> scripts/auth/deploy.sh --env prod --profile <auth p>
+      ```
+
+      Each writes `amplify/auth-environments/<env>.json`. Commit both: they hold the pool IDs and
+      domain, which aren't secret.
+   4. Add each pool's redirect URI, which the deploy prints
+      (`https://<cognito-domain>/oauth2/idpresponse`), to the Google client's authorized redirect
+      URIs.
+
+   Rerun step 3 when the pool settings change, or the Google secret (then redeploy both pools).
+4. **Amplify app** (app account): connect the GitHub repo `bobthemagicman/content-forge` in
+   `us-west-2`. Set:
    - env vars `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget
      alert goes);
    - env vars `ALLOWED_EMAIL_DOMAIN` (the Workspace domain allowed to sign in), `APP_ORIGIN`
@@ -67,12 +85,13 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 
 ```bash
 npm ci
-scripts/bootstrap/create-signing-keys.sh --env sandbox-$(whoami) --profile <p>   # once per sandbox
-npx ampx sandbox secret set GOOGLE_CLIENT_ID --profile <p>       # once per sandbox
-npx ampx sandbox secret set GOOGLE_CLIENT_SECRET --profile <p>   # once per sandbox
-ALLOWED_EMAIL_DOMAIN=<domain> npx ampx sandbox --profile <p>      # writes amplify_outputs.json
-NEXT_PUBLIC_DEMO_MODE=0 npm run dev                              # http://localhost:3000
+scripts/bootstrap/create-signing-keys.sh --env sandbox-$(whoami) --profile <app p>   # once per sandbox
+ALLOWED_EMAIL_DOMAIN=<domain> npx ampx sandbox --profile <app p>   # writes amplify_outputs.json
+NEXT_PUBLIC_DEMO_MODE=0 npm run dev                                # http://localhost:3000
 ```
+
+Sandboxes deploy to the app account and sign in through the shared `dev` pool in the auth account
+(research R21), whose `amplify/auth-environments/dev.json` is committed. Nothing else to set up.
 
 Plain `npm run dev` runs the beta preview: simulated sign-in on the demo catalog. Without a sandbox,
 `predev`/`prebuild` copy the E2E fixture to `amplify_outputs.json` so the build still works;
@@ -82,9 +101,8 @@ The sandbox's environment name is `sandbox-<OS username>`. If your username has 
 than letters, digits, `.`, `_` and `-`, synth stops with an error: pick a name and set it for both
 commands, `--env sandbox-<name>` and `AWS_BRANCH=sandbox-<name> npx ampx sandbox ...`.
 
-Sandboxes use their own bucket, table, Cognito pool, and signing keys. Commit the sandbox's
-`keys/sandbox-<user>.public-key.pem`. The callback and logout URLs for `http://localhost:3000` are in
-`defineAuth`.
+Sandboxes use their own bucket, table, and signing keys, and share the `dev` user pool. Commit the
+sandbox's `keys/sandbox-<user>.public-key.pem`.
 
 Sandbox assets are served from the distribution's `*.cloudfront.net` domain with cross-site cookies,
 and there's no budget or custom domain (research R19). **Use Chrome for local development.**
@@ -198,8 +216,8 @@ and rerun. Already-imported items are skipped.
 
 Suspending someone in Google Workspace doesn't end their Content Forge session: Cognito keeps
 renewing it from its own 7-day refresh token (research R3). When someone leaves, also sign them out
-everywhere and disable them in the user pool, with the profile and pool ID for that environment
-(the pool ID is `auth.user_pool_id` in `amplify_outputs.json`):
+everywhere and disable them in the user pool. Use the auth account's profile and the pool ID for
+that environment (`userPoolId` in `amplify/auth-environments/<dev|prod>.json`):
 
 ```bash
 PROFILE=<profile>

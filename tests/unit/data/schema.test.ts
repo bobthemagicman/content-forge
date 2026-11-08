@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { schema } from "../../../amplify/data/resource";
+import { schema } from "../../../amplify/data/schema";
 import { CONTENT_TYPES } from "@/lib/content-types";
 
 const sdl = schema.transform().schema;
@@ -22,7 +22,7 @@ describe("catalog schema (data-model.md, research R4)", () => {
 
   it("exposes no generated operations, and only read access for signed-in users", () => {
     expect(sdl).toContain("@model(mutations:null,subscriptions:null,queries:null)");
-    expect(sdl).toContain("@auth(rules: [{allow: private, operations: [read]}])");
+    expect(sdl).toContain("@auth(rules: [{allow: private, provider: oidc, operations: [read]}])");
   });
 
   it("defines only sparse indexes, so no query can return a draft", () => {

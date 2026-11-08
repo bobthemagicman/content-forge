@@ -1,0 +1,4 @@
+{
+  "app": "npx tsx bin/auth.ts",
+  "watch": { "include": ["bin/**", "lib/**"] }
+}

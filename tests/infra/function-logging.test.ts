@@ -35,8 +35,10 @@ const functions = resourceFiles(join(root, "amplify")).flatMap((file) =>
 );
 
 describe("Amplify function log retention", () => {
-  it("finds the functions to check", () => {
-    expect(functions.length).toBeGreaterThan(0);
+  // None today: the pre-sign-up trigger moved to infra/auth (research R21), whose stack test checks
+  // its retention. This keeps catching the next `defineFunction`.
+  it("finds every defineFunction call", () => {
+    expect(functions.every(({ call }) => call.startsWith("defineFunction("))).toBe(true);
   });
 
   it.each(functions)("$file sets logging retention to 2 weeks", ({ call }) => {

@@ -176,6 +176,7 @@ that every story needs
   - applies to every `triggerSource`, including `PreSignUp_ExternalProvider` (research R3,
     FR-001/002).
   - **Hosted-domain check (2026-11-07):** now admits only `PreSignUp_ExternalProvider`, and also requires `custom:hd` (Google's `hd` claim) to equal the domain and `email_verified` not to be `"false"`. The session function checks `custom:hd` too.
+  - **Moved by T130:** the handler is now `infra/auth/lib/pre-sign-up.ts`, deployed with the user pool in the auth account (research R21).
 - [x] T015 [P] Write unit tests in `tests/unit/auth/pre-sign-up.test.ts`. Cover:
   - `user@example.com` accepted;
   - `USER@Example.com` accepted;
@@ -195,6 +196,7 @@ that every story needs
   - `triggers: { preSignUp }`.
   - **Hosted-domain check (2026-11-07):** Google is now an OIDC provider named `GoogleWorkspace` (issuer `https://accounts.google.com`), because only OIDC providers can map Google's `hd` claim, to custom attribute `custom:hd` (mutable). `email_verified` is mapped too. The app signs in with `{ provider: { custom: 'GoogleWorkspace' } }`.
   - **Done:** `example.com` and `content.example.com` come from `ALLOWED_EMAIL_DOMAIN` and `APP_ORIGIN` at synth time (`amplify/config.ts`), so the owner's domain stays out of the repo. The app client's OAuth scopes are `OPENID EMAIL PROFILE`. Because `email` login is on, the client also lists `COGNITO` as a provider; no password UI exists, and `allowAdminCreateUserOnly` blocks self sign-up.
+  - **Replaced by T130:** the pool is now `infra/auth/lib/auth-stack.ts` in the auth account, and the app's backend has no `defineAuth` (research R21).
 - [x] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
   [data-model.md](./data-model.md#entity-content):
   - enums `ContentType`, `ContentStatus`, `LicenseType`;
@@ -353,10 +355,11 @@ that every story needs
   1. deploy `infra/edge-cert`;
   2. run `scripts/bootstrap/create-signing-keys.sh --env master` and commit
      `keys/master.public-key.pem`;
-  3. create the Internal Google OAuth client;
-  4. connect the Amplify app in `us-west-2`, set secrets `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
-     and env `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, `BUDGET_ALERT_EMAIL`, and map
-     `content.example.com`.
+  3. create the Internal Google OAuth client, store it with `scripts/auth/set-google-secret.sh`, and
+     deploy the `prod` user pool to the auth account with `scripts/auth/deploy.sh --env prod`
+     (research R21);
+  4. connect the Amplify app in `us-west-2` in the app account, set env `ASSETS_CERT_ARN`,
+     `HOSTED_ZONE_ID`, `BUDGET_ALERT_EMAIL`, and map `content.example.com`.
 
   Then deploy the skeleton and **verify R2**: does platform `WEB` with `out/` serve correctly, or
   is the "Web" framework override needed? Record the outcome in
@@ -1107,6 +1110,21 @@ download increases the item's displayed count by one.
   `specs/001-content-forge-mvp/research.md`, check every checkbox in this file, and open the PR from
   `001-content-forge-mvp` to `master` linking issue #1, with a per-principle compliance note
   (constitution: Development Workflow).
+- [ ] T130 Move the user pool to a separate auth account (research R21):
+  - `infra/auth`, a standalone CDK app with a `dev` pool (localhost, every sandbox) and a `prod`
+    pool, each with the Google OIDC provider, the refresh-only app client, the domain and the
+    pre-sign-up trigger, which moves from `amplify/auth/` unchanged;
+  - `scripts/auth/set-google-secret.sh` and `scripts/auth/deploy.sh`, which writes the committed
+    handover file `amplify/auth-environments/<env>.json`;
+  - the app's backend drops `defineAuth`, AppSync switches to OIDC mode with the pool as issuer,
+    the session function verifies against the handover file's pool, and `backend.addOutput` writes
+    the `auth` section of `amplify_outputs.json`;
+  - tests: `tests/infra/auth-stack.test.ts` takes over the app client checks;
+    `tests/infra/backend-auth.test.ts` checks the backend has no Cognito resources and trusts the
+    handover file's pool; `tests/unit/auth-environment.test.ts` covers the file's checks;
+  - **verify on a sandbox** in the app account: Google sign-in through the `dev` pool, catalog
+    queries through AppSync's OIDC mode (including after a token refresh), `/_session`, and
+    quickstart V2 and V3.
 - [ ] T128 Retire the beta preview's stand-ins once the backend is live (US1–US3 complete):
   - point `src/lib/data/content.ts` at AppSync only and delete `src/lib/data/demo/`,
     `public/demo/`, and `scripts/demo/`;

@@ -1,56 +1,15 @@
 import { defineBackend } from "@aws-amplify/backend";
 import { existsSync, readFileSync } from "node:fs";
-import { userInfo } from "node:os";
 import { fileURLToPath } from "node:url";
-import { preSignUp } from "./auth/pre-sign-up/resource";
-import { auth } from "./auth/resource";
 import { ALLOWED_EMAIL_DOMAIN, APP_ORIGIN, ASSETS_DOMAIN, HOSTED_ZONE_NAME, LOCAL_ORIGIN } from "./config";
 import { AssetsCdn } from "./custom/assets-cdn/construct";
 import { data } from "./data/resource";
-import { resolveEnvName } from "./environment";
+import { authEnvironment, envName, isProduction } from "./deployment";
 
-const backend = defineBackend({ auth, data, preSignUp });
-
-// --- Environment (research R19) ---------------------------------------------------------------
-// Amplify Hosting sets AWS_BRANCH; a personal `ampx sandbox` doesn't.
-const envName = resolveEnvName(process.env.AWS_BRANCH, userInfo().username);
-const isProduction = envName === "master";
-
-// The domain settings default to `example.com` placeholders so the real domain stays out of this
-// repo. Production must set them: a placeholder deploy would fail closed, but confusingly.
-if (isProduction) {
-  const missing = ["ALLOWED_EMAIL_DOMAIN", "APP_ORIGIN", "ASSETS_DOMAIN"].filter((name) => !process.env[name]);
-  if (missing.length) {
-    throw new Error(`Production needs ${missing.join(", ")} set on the Amplify app (quickstart §2).`);
-  }
-}
-
-// --- Auth overrides ---------------------------------------------------------------------------
-const { cfnIdentityPool, cfnUserPool, cfnUserPoolClient } = backend.auth.resources.cfnResources;
-
-// No guest identities. The app never uses AWS credentials (src/lib/auth/amplify-config.ts leaves
-// the identity pool out), so a guest identity would only be an unused door.
-cfnIdentityPool.allowUnauthenticatedIdentities = false;
-
-// No self-service sign-up; accounts come only from federated Google sign-in, which the pre-sign-up
-// trigger limits to the allowed domain (research R3). Verify in T054 that first-time Google sign-in
-// still works with this on; if it doesn't, remove it.
-cfnUserPool.adminCreateUserConfig = { allowAdminCreateUserOnly: true };
-
-// Refresh tokens last 7 days (research R3).
-cfnUserPoolClient.refreshTokenValidity = 7;
-cfnUserPoolClient.tokenValidityUnits = { refreshToken: "days" };
-
-// Google is the only way to get tokens from this client (research R3): no Cognito sign-in form,
-// and no SRP or custom-auth flows, only the authorization-code flow plus refresh. Tokens from
-// those other flows always carry `aws.cognito.signin.user.admin`, the scope that lets a user
-// rewrite their own attributes. `custom:hd` and `email` must stay writable by this client,
-// because Cognito rewrites mapped attributes on every Google sign-in, so the scope is the guard.
-// tests/infra/auth-client.test.ts checks all three settings.
-cfnUserPoolClient.supportedIdentityProviders = cfnUserPoolClient.supportedIdentityProviders?.filter(
-  (provider) => provider !== "COGNITO",
-);
-cfnUserPoolClient.explicitAuthFlows = ["ALLOW_REFRESH_TOKEN_AUTH"];
+// No `auth` resource: the user pool lives in the auth account (infra/auth, research R21), and this
+// backend only trusts its tokens. The pool's settings (Google only, refresh-only client, no
+// self-service sign-up) are in infra/auth/lib/auth-stack.ts.
+const backend = defineBackend({ data });
 
 // --- Asset plane (research R6–R8) -------------------------------------------------------------
 const publicKeyPath = fileURLToPath(new URL(`./custom/assets-cdn/keys/${envName}.public-key.pem`, import.meta.url));
@@ -65,8 +24,8 @@ const assets = new AssetsCdn(backend.createStack("assets"), "AssetsCdn", {
   envName,
   isProduction,
   publicKeyPem: readFileSync(publicKeyPath, "utf8"),
-  userPoolId: backend.auth.resources.userPool.userPoolId,
-  userPoolClientId: backend.auth.resources.userPoolClient.userPoolClientId,
+  userPoolId: authEnvironment.userPoolId,
+  userPoolClientId: authEnvironment.userPoolClientId,
   allowedOrigins: [isProduction ? APP_ORIGIN : LOCAL_ORIGIN],
   allowedEmailDomain: ALLOWED_EMAIL_DOMAIN,
   contentTable: backend.data.resources.tables["Content"],
@@ -80,6 +39,30 @@ const assets = new AssetsCdn(backend.createStack("assets"), "AssetsCdn", {
 });
 
 // --- Outputs (contracts/data-api.md, custom outputs) ------------------------------------------
+// The auth section Amplify would write for its own pool, so the front end configures Amplify
+// unchanged (src/lib/auth/amplify-config.ts). No identity pool: the app never uses AWS credentials.
+backend.addOutput({
+  auth: {
+    aws_region: authEnvironment.region,
+    user_pool_id: authEnvironment.userPoolId,
+    user_pool_client_id: authEnvironment.userPoolClientId,
+    username_attributes: ["email"],
+    standard_required_attributes: ["email"],
+    user_verification_types: ["email"],
+    mfa_configuration: "NONE",
+    mfa_methods: [],
+    groups: [],
+    unauthenticated_identities_enabled: false,
+    oauth: {
+      identity_providers: [],
+      domain: authEnvironment.domain,
+      scopes: ["openid", "email", "profile"],
+      redirect_sign_in_uri: [`${authEnvironment.appOrigin}/auth/callback/`],
+      redirect_sign_out_uri: [`${authEnvironment.appOrigin}/`],
+      response_type: "code",
+    },
+  },
+});
 backend.addOutput({
   custom: {
     assetsBaseUrl: assets.assetsBaseUrl,

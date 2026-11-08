@@ -1,0 +1,20 @@
+{
+  "name": "content-forge-auth",
+  "private": true,
+  "type": "module",
+  "description": "Cognito user pools in the auth account (research R21); deploy with scripts/auth/deploy.sh",
+  "scripts": {
+    "synth": "cdk synth"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.275.0",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "@types/node": "^24",
+    "aws-cdk": "^2.1148.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15"
+  }
+}

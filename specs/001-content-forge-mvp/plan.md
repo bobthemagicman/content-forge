@@ -92,7 +92,7 @@ block the plan.
 |---|---|---|---|---|
 | I | Cost Discipline | No always-on compute, NAT, or VPC Lambdas. A cost estimate for each billable resource. Budget alert in code. Heavy processing ahead of time. Bounded logs | ✅ | ✅ The R17 estimate puts every item under $1 except S3 storage, which the spec excludes. The budget is in `AssetsCdn` (production only, R19). All three Lambdas set 14-day log retention, checked by tests. All previews are generated locally |
 | II | Server-Enforced Access & Isolation | Domain check in the backend. Every read, preview, demo, and download authenticated by the backend/CDN. No data or secrets in bundles. Private storage with OAC. Links ≤ 5 min. Demos on a separate site. Managed secrets. Archive guards | ✅ | ✅ Pre-sign-up trigger, session Lambda, and download function all check the domain. AppSync uses user-pool auth. CloudFront trusted key groups cover `/v/*`, `/a/*`, and every demo. The function URL uses OAC + IAM. The private key is in SSM. Demos are on the demo distribution's `*.cloudfront.net` host, a separate site, and a drafted item has no launch link (R20, constitution 1.1.0). Ingest limits are in the [ingest contract](./contracts/ingest-cli.md) |
-| III | Static Front End, Serverless Backend, Everything as Code | `output: 'export'`, App Router only, client calls to the Amplify backend, IaC for everything, bundled Next.js docs read first | ✅ | ✅ Static export (R1). Infrastructure is the `amplify/` backend plus `infra/edge-cert`. Documented bootstrap exceptions: the SSM SecureString, the Google OAuth client, and connecting the Amplify app ([quickstart](./quickstart.md) §2). Adding an item, demo included, is data only: no per-item infrastructure (R20) |
+| III | Static Front End, Serverless Backend, Everything as Code | `output: 'export'`, App Router only, client calls to the Amplify backend, IaC for everything, bundled Next.js docs read first | ✅ | ✅ Static export (R1). Infrastructure is the `amplify/` backend plus `infra/edge-cert` and `infra/auth` (the user pools, in a separate auth account, R21). Documented bootstrap exceptions: the SSM SecureString, the Google OAuth client, and connecting the Amplify app ([quickstart](./quickstart.md) §2). Adding an item, demo included, is data only: no per-item infrastructure (R20) |
 | IV | Accessible by Default | WCAG 2.1 AA, React Aria, axe with 0 violations in CI, contrast, reduced motion, alt text | ✅ | ✅ `GridList` rows (R12), the [UI accessibility contract](./contracts/ui-routes.md#accessibility-contract-principle-iv), axe in E2E (R15) |
 | V | Tested Increments | Tests for every story. Unit tests for security rejection paths. CI blocks on failure. Stories independently testable | ✅ | ✅ The R15 matrix covers each layer. A mocked-backend E2E makes every browser story testable in CI, and the ingest E2E runs the real CLI pipeline for US4 (constitution v1.0.1) |
 | VI | Simplicity & Agent-Legible Code | YAGNI, strict TypeScript, module boundaries, new dependencies justified, `AGENTS.md` kept current | ✅ | ✅ No state or CLI-framework libraries. Dependencies justified below. `AGENTS.md` update is a planned task |
@@ -125,11 +125,11 @@ specs/001-content-forge-mvp/
 
 ```text
 amplify/                                  # Amplify Gen 2 backend (CDK under the hood)
-├── backend.ts                            # defineBackend + AssetsCdn stack + addOutput(custom)
-├── auth/
-│   ├── resource.ts                       # Google federation, callback/logout URLs
-│   └── pre-sign-up/{resource,handler}.ts # @example.com domain gate
-├── data/resource.ts                      # Content model, indexes, getDownloadUrl query
+├── backend.ts                            # defineBackend + AssetsCdn stack + addOutput(auth, custom)
+├── deployment.ts                         # environment name, and the user pool it signs in with
+├── auth-environment.ts                   # reads auth-environments/<dev|prod>.json (research R21)
+├── auth-environments/{dev,prod}.json     # pool IDs and domain, written by scripts/auth/deploy.sh
+├── data/{schema,resource}.ts             # Content model, indexes, getDownloadUrl query; OIDC auth
 ├── functions/get-download-url/{resource,handler}.ts
 ├── custom/assets-cdn/
 │   ├── construct.ts                      # bucket, both distributions, key group, DownloadEvents, budget
@@ -144,6 +144,15 @@ infra/edge-cert/                          # standalone CDK app, us-east-1 ACM ce
 ├── lib/edge-cert-stack.ts
 ├── cdk.json
 └── tsconfig.json
+
+infra/auth/                               # standalone CDK app, user pools in the auth account (R21)
+├── bin/auth.ts                           # -c env=dev|prod
+├── lib/auth-stack.ts                     # pool, Google OIDC provider, app client, domain
+├── lib/pre-sign-up.ts                    # @example.com domain gate
+├── cdk.json
+└── tsconfig.json
+
+scripts/auth/{deploy,set-google-secret}.sh # deploy a pool + write its handover file; store Google secret
 
 scripts/bootstrap/create-signing-keys.sh  # key pair per environment → SSM + <env>.public-key.pem
 
@@ -196,7 +205,7 @@ amplify.yml                               # backend deploy, static build (out/),
 ```
 
 **Structure Decision**: one repository and one package for the web app, with the Amplify Gen 2
-backend in `amplify/` (Amplify's convention), the one-off certificate app in `infra/edge-cert/`,
+backend in `amplify/` (Amplify's convention), the one-off certificate app in `infra/edge-cert/`, the user pools in `infra/auth/` (another AWS account, R21),
 and the ingest CLI in `tools/ingest/`. This follows the module boundaries in Principle VI. Each
 slice can be built and tested in isolation, which suits agent-driven work. All tests live under
 `tests/`, split by layer, to match the CI gates.
