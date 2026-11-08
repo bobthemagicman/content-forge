@@ -612,7 +612,8 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - one failing item doesn't stop the batch;
   - `--dry-run` makes zero AWS calls;
   - old `v/` keys are deleted only after the record is written;
-  - `--draft` omits `publishedAt`.
+  - `--draft` omits `publishedAt` and `publishedSlug`;
+  - re-importing a published item with `--draft` removes both attributes (absent, not null).
 - [ ] T060 [P] [US4] Write unit tests in `tests/unit/ingest/cli.test.ts` covering argument parsing
   for `batch`/`one`/`doctor` and exit codes `0`/`1`/`2`/`3`, per
   [contracts/ingest-cli.md](./contracts/ingest-cli.md#output).
@@ -702,8 +703,8 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - `findBySlug(slug)` looks the slug up in a projected `Scan` (`id`, `slug`), read once per run. There's no slug GSI to query: it would be public through the API (T017);
   - `putContent(record, existing?)` writes all [data-model](./data-model.md#entity-content)
     fields plus the Amplify attributes `id`, `__typename: 'Content'`, `createdAt`, `updatedAt`;
-  - for an existing item, it keeps `id`, `downloadCount`, and `publishedAt`; it sets `publishedSlug` on published items and removes it from drafts;
-  - for a draft, it omits `publishedAt` entirely (sparse index).
+  - for an existing item, it keeps `id` and `downloadCount`. A published item keeps its `publishedAt` (or gets one if it was a draft) and gets `publishedSlug`;
+  - a draft has neither `publishedAt` nor `publishedSlug`, including a published item being turned back into a draft. Both must be absent, not null, or the draft stays in the sparse indexes (PR #134 re-review).
 - [ ] T074 [P] [US4] Implement `tools/ingest/report/report.ts`, which writes `ingest-report.json`
   in the [data-model shape](./data-model.md#entity-import-report-local-file) plus a console summary,
   and `tools/ingest/report/state.ts`, which reads and writes `.ingest-state.json` keyed by source
