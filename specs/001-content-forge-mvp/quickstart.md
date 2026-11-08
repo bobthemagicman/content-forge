@@ -144,28 +144,40 @@ Run against `https://content.example.com` (or a sandbox URL) after step 4.
 
 ### Attribute-write check (V2)
 
-A signed-in user must not be able to rewrite their own `custom:hd` (research R3). In the signed-in
-app tab's devtools, find Amplify's `localStorage` keys ending in `.accessToken` and
-`.refreshToken`. Then, in a terminal, with the region and client ID from `amplify_outputs.json`:
+A signed-in user must not be able to rewrite their own `custom:hd` (research R3). Copy the tokens
+through the clipboard so they never show on screen or in shell history. Read them by client ID:
+after a sandbox is deleted and redeployed, `localStorage` still holds the old client's tokens, and
+those fail with "Invalid Refresh Token".
+
+In the signed-in app tab's devtools console, with `auth.user_pool_client_id` from
+`amplify_outputs.json`:
+
+```js
+const p = "CognitoIdentityServiceProvider.<user_pool_client_id>.";
+const u = localStorage.getItem(p + "LastAuthUser");
+copy(localStorage.getItem(p + u + ".accessToken"));   // then ACCESS=$(pbpaste) in the terminal
+copy(localStorage.getItem(p + u + ".refreshToken"));  // then REFRESH=$(pbpaste)
+```
+
+Then, in a terminal in the repo folder:
 
 ```bash
-ACCESS=<accessToken value>
-REFRESH=<refreshToken value>
-CLIENT_ID=<auth.user_pool_client_id>
-
+CLIENT_ID=$(node -p 'require("./amplify_outputs.json").auth.user_pool_client_id')
 scopes() { node -e 'console.log(JSON.parse(Buffer.from(process.argv[1].split(".")[1], "base64url")).scope)' "$1"; }
 
 # 1. The sign-in token: the scopes must not include aws.cognito.signin.user.admin.
 scopes "$ACCESS"
-aws cognito-idp update-user-attributes --region us-west-2 --access-token "$ACCESS" \
+aws cognito-idp update-user-attributes --no-sign-request --region us-west-2 --access-token "$ACCESS" \
   --user-attributes Name=custom:hd,Value=attacker.test   # expect NotAuthorizedException
 
 # 2. A refreshed token, the way Amplify refreshes.
-REFRESHED=$(aws cognito-idp get-tokens-from-refresh-token --region us-west-2 --client-id "$CLIENT_ID" \
-  --refresh-token "$REFRESH" --query AuthenticationResult.AccessToken --output text)
+REFRESHED=$(aws cognito-idp get-tokens-from-refresh-token --no-sign-request --region us-west-2 \
+  --client-id "$CLIENT_ID" --refresh-token "$REFRESH" --query AuthenticationResult.AccessToken --output text)
 scopes "$REFRESHED"
-aws cognito-idp update-user-attributes --region us-west-2 --access-token "$REFRESHED" \
+aws cognito-idp update-user-attributes --no-sign-request --region us-west-2 --access-token "$REFRESHED" \
   --user-attributes Name=custom:hd,Value=attacker.test   # expect NotAuthorizedException
+
+unset ACCESS REFRESH REFRESHED; pbcopy < /dev/null
 ```
 
 These tokens act as you. Run the commands in your own terminal, don't paste the tokens anywhere

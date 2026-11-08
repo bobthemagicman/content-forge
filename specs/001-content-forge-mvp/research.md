@@ -112,9 +112,10 @@ they're the first tasks of implementation.
   created the user with `custom:hd` set to the Workspace domain, through the pre-sign-up trigger's
   stricter checks. So the OIDC mapping of `hd` works, and `allowAdminCreateUserOnly: true` doesn't
   block first-time federated sign-in. Still to confirm on `master` (T054).
-- **Still to verify on a sandbox**: that an access token, both from sign-in and after a refresh,
-  has no `aws.cognito.signin.user.admin` and can't call `UpdateUserAttributes` (quickstart V2). The
-  docs don't say whether a refreshed token keeps the original scopes.
+- **Verified on a sandbox (2026-11-07)**: Google sign-in works with these client settings. The
+  sign-in access token and one from `GetTokensFromRefreshToken` both carry only `openid profile
+  email`, and `UpdateUserAttributes` refuses both with `NotAuthorizedException` (quickstart V2). The
+  docs don't say whether a refreshed token keeps the original scopes. This check shows it does.
 - **Alternatives considered**:
   - Auth.js: needs a server, so it's rejected for static export.
   - Cognito custom domain (`auth.example.com`): needs another us-east-1 cert. The Cognito prefix
