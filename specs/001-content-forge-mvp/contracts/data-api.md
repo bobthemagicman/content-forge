@@ -17,7 +17,7 @@ enum LicenseType   { REGULAR EXTENDED OTHER UNKNOWN }
 
 model Content            (fields per data-model.md)
   @auth(authenticated: [read])
-  @index(bySlug: slug)
+  @index(byPublishedSlug: publishedSlug)        (sparse: published items only)
   @index(byTypeAndPublishedAt: type, sortKey publishedAt)
 
 type DownloadUrl { url: AWSURL!, expiresAt: AWSDateTime! }
@@ -49,12 +49,12 @@ The browse page issues one call per `ContentType`, in parallel.
 
 ### 2. Get an item by slug
 
-`listContentBySlug(slug: String!)`
+`listContentBySlug(publishedSlug: String!)`
 
 | Aspect | Contract |
 |---|---|
 | Result | 0 or 1 item. More than 1 is a data error: the client uses the first and logs a warning |
-| Draft handling | If `status !== 'PUBLISHED'`, the client renders not-found (FR-016) |
+| Draft handling | Drafts aren't in the index, so an unpublished slug returns `items: []` and the client renders not-found (FR-016) |
 | Selection set | All `Content` fields except `archiveKey` |
 
 ### 3. Get a download URL
@@ -85,7 +85,7 @@ container.
 
 | Key | Example | Consumers |
 |---|---|---|
-| `assetsBaseUrl` | `https://assets.example.com` (sandboxes: `https://<id>.cloudfront.net`) | Web app (image loader, demo links, session) |
+| `assetsBaseUrl` | `https://assets.example.com` (sandboxes: `https://<id>.cloudfront.net`) | Web app (image loader, session, demo launch links via `/_session/demo/<id>`) |
 | `assetsBucketName` | `content-forge-assets-master` | Ingest CLI |
 | `contentTableName` | `Content-<apiId>-NONE` | Ingest CLI |
 | `region` | `us-west-2` | Ingest CLI |

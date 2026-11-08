@@ -19,7 +19,7 @@
       "require_uppercase": true
     },
     "oauth": {
-      "identity_providers": ["GOOGLE"],
+      "identity_providers": [],
       "redirect_sign_in_uri": ["http://localhost:4173/auth/callback/", "http://localhost:3000/auth/callback/"],
       "redirect_sign_out_uri": ["http://localhost:4173/", "http://localhost:3000/"],
       "response_type": "code",

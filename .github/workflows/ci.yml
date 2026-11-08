@@ -21,6 +21,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:infra
       # The licensed Aeonik files are absent here; prebuild substitutes Lato (T029).
       - run: npm run build
       # E2E builds its own export (DEMO_MODE off, mocked backend; see playwright.config.ts).

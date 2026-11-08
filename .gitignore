@@ -45,6 +45,8 @@ Thumbs.db
 *private-key*
 # ...except the per-environment CloudFront public keys, which backend.ts reads at synth
 !amplify/custom/assets-cdn/keys/*.public-key.pem
+# ...but not the throwaway keys tests/infra/auth-client.test.ts writes, if a run is killed
+amplify/custom/assets-cdn/keys/sandbox-vitest-*.pem
 
 # debug
 npm-debug.log*

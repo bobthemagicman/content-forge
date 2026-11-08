@@ -39,7 +39,7 @@ and [assets-cdn.md](./assets-cdn.md)).
 | Condition | Download | Live Demo | Vendor demo |
 |---|---|---|---|
 | Any published item | ✔ | | |
-| `type = WEBSITE_TEMPLATE` and `demoEntryPath` present | ✔ | ✔ (new tab) | |
+| `type = WEBSITE_TEMPLATE` and `demoEntryPath` present | ✔ | ✔ (new tab, through a launch link: [assets contract](./assets-cdn.md#client-obligations)) | |
 | `demoEntryPath` absent and `externalDemoUrl` present | ✔ | | ✔ (new tab, `rel="noopener noreferrer"`) |
 
 ## Accessibility contract (Principle IV)

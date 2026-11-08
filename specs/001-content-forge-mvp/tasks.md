@@ -52,7 +52,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     - `test:ingest-e2e` (`vitest run -c vitest.ingest-e2e.config.ts`);
     - `ingest` (`tsx tools/ingest/cli.ts`);
   - create `.nvmrc` containing `24`.
-  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root plus `amplify/`, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. The E2E work added `test:e2e`, `test:smoke`, and `build:e2e` (the export with `DEMO_MODE` off and assets on `https://assets.e2e.test`, which the Playwright web server builds). Still to do: `test:infra`, `test:ingest-e2e`, `ingest`, and the `infra` typecheck project.
+  - **Progress (beta preview):** `engines`, `.nvmrc`, and the `typecheck` (root plus `amplify/`, after `next typegen`), `test`, and `test:watch` scripts are in. The beta preview added `demo:assets` and `beta:deploy`. The E2E work added `test:e2e`, `test:smoke`, and `build:e2e` (the export with `DEMO_MODE` off and assets on `https://assets.e2e.test`, which the Playwright web server builds). The backend work added `test:infra`, and `typecheck` now also checks `infra/edge-cert/`. Still to do: `test:ingest-e2e` and `ingest`.
 - [ ] T002 Install dependencies, updating `package.json` and `package-lock.json`:
   - **runtime**: `aws-amplify`, `react-aria-components`;
   - **backend dev**: `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`,
@@ -66,7 +66,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
 
   Run `npx playwright install chromium firefox webkit`. Every dependency here is justified in
   plan.md Complexity Tracking (Principle VI).
-  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. The E2E work added `@playwright/test` and `@axe-core/playwright` (the browsers install with `npx playwright install`). Still to do: the remaining backend packages (`aws-jwt-verify`, `@aws-sdk/*`), the ingest packages, and `aws-sdk-client-mock`. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. The committed lockfile is a fresh install plus the nested entries a second install adds, plus hand-added nested `@opentelemetry/core@2.0.0` and `semver` entries under the two Amplify constructs, which bundle packages whose dependencies they don't bundle. npm 11.19 also prunes those nested entries, and esbuild's optional entries, on an incremental install; restore any that disappear from the previous lockfile. After any dependency change, check that `npm ci` passes with CI's npm version (`npx npm@<version> ci`; newer npm is stricter) and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
+  - **Progress (beta preview):** Installed: `react-aria-components`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, plus `@fontsource/lato` (T029). `@types/node` moved to `^24` (a Vitest peer). Auth work added `aws-amplify`, `@aws-amplify/backend`, `@aws-amplify/backend-cli`, `aws-cdk-lib`, `constructs`, `@types/aws-lambda`, and `@testing-library/user-event`. The E2E work added `@playwright/test` and `@axe-core/playwright` (the browsers install with `npx playwright install`). The backend work added `aws-jwt-verify`, `@aws-sdk/cloudfront-signer`, `@aws-sdk/client-ssm`, `@aws-sdk/client-dynamodb` (the demo launch check), `aws-sdk-client-mock`, and `esbuild` (CDK bundles Lambda code with it; without a top-level copy it falls back to Docker). Still to do: `lib-dynamodb` and the S3 SDK packages (with T093 and US4) and the ingest packages. **Lockfile caveat:** with these packages, a plain `npm install` on an existing `node_modules` (npm 11) drops rolldown's platform bindings, and a fresh one misses packages that Amplify's bundled constructs need, so `npm ci` fails. The committed lockfile is a fresh install plus the nested entries a second install adds, plus hand-added nested `@opentelemetry/core@2.0.0` and `semver` entries under the two Amplify constructs, which bundle packages whose dependencies they don't bundle. npm 11.19 also prunes those nested entries, and esbuild's optional entries, on an incremental install; restore any that disappear from the previous lockfile. npm 11.5 does the same on `npm install <pkg>`: the backend work restored 30 dropped entries (the rolldown and lightningcss bindings and the nested Amplify entries) by copying them back from the previous lockfile. After any dependency change, check that `npm ci` passes with CI's npm version (`npx npm@<version> ci`; newer npm is stricter) and that `package-lock.json` still lists the `@rolldown/binding-*` entries.
 - [x] T003 [P] Rewrite `next.config.ts` per research R1:
   - add `output: 'export'`, `trailingSlash: true`,
     `images: { loader: 'custom', loaderFile: './src/lib/assets/image-loader.ts' }`;
@@ -97,7 +97,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
   - `vitest.infra.config.ts`: node environment, include `tests/infra/**`;
   - `vitest.ingest-e2e.config.ts`: node environment, include `tests/e2e-ingest/**`, `testTimeout`
     300 s, no file parallelism.
-  - **Progress (beta preview):** `vitest.config.ts` and `tests/setup/vitest.setup.ts` exist. The `$amplify` alias is in, and the setup file registers Testing Library's `cleanup` (Vitest runs without globals). Still to do: `vitest.infra.config.ts` and `vitest.ingest-e2e.config.ts`.
+  - **Progress (beta preview):** `vitest.config.ts` and `tests/setup/vitest.setup.ts` exist. The `$amplify` alias is in, and the setup file registers Testing Library's `cleanup` (Vitest runs without globals). The backend work added `vitest.infra.config.ts`. Still to do: `vitest.ingest-e2e.config.ts`.
 - [x] T007 [P] Create `playwright.config.ts`:
   - project `e2e`: `testDir: tests/e2e`, Chromium. The config's `webServer` runs
     `node scripts/serve-out.mjs` on port 4173;
@@ -119,7 +119,7 @@ the us-east-1 certificate app in `infra/edge-cert/`, the ingest CLI in `tools/in
     `npm test` → `npm run build` → `npx playwright install --with-deps chromium firefox webkit` →
     `npm run test:e2e` → `npm run test:infra`;
   - upload the Playwright report on failure.
-  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. `use-e2e-outputs` runs from `prebuild`/`typecheck` (T041). The Playwright browsers, `test:e2e`, and the report upload on failure are in. Still to do: `test:infra` (with T023).
+  - **Progress (beta preview):** `.github/workflows/ci.yml` runs `npm ci` → lint → typecheck → unit tests → build on the Node version in `.nvmrc`. `use-e2e-outputs` runs from `prebuild`/`typecheck` (T041). The Playwright browsers, `test:e2e`, and the report upload on failure are in. `test:infra` runs after the unit tests.
 
 ---
 
@@ -132,17 +132,18 @@ that every story needs
 
 ### Bootstrap & edge infrastructure
 
-- [ ] T010 [P] Create the standalone CDK app `infra/edge-cert/`:
+- [x] T010 [P] Create the standalone CDK app `infra/edge-cert/`:
   - files: `package.json` (`aws-cdk-lib`, `constructs`, `aws-cdk`), `cdk.json`, `tsconfig.json`
     (strict, checked by the root `typecheck` script), `bin/edge-cert.ts`
     (`env.region = 'us-east-1'`), and `lib/edge-cert-stack.ts`;
   - the stack: an ACM `Certificate` for `assets.example.com`, DNS-validated against
     `HostedZone.fromHostedZoneAttributes` using context `hostedZoneId`, with `CfnOutput`
     `AssetsCertArn` (research R10).
-- [ ] T011 [P] Write CDK assertion tests for `infra/edge-cert` in `tests/infra/edge-cert.test.ts`:
+  - **Done:** the domain, zone ID, and zone name come from context (`-c assetsDomain=… -c hostedZoneId=…`) or the `ASSETS_DOMAIN`/`HOSTED_ZONE_ID`/`HOSTED_ZONE_NAME` variables, so the real domain stays out of the repo; the zone name defaults to the domain's parent. The app has its own lockfile and runs with `tsx`.
+- [x] T011 [P] Write CDK assertion tests for `infra/edge-cert` in `tests/infra/edge-cert.test.ts`:
   the cert's domain is `assets.example.com`, it uses DNS validation, the stack region is
   `us-east-1`, and the output `AssetsCertArn` exists.
-- [ ] T012 [P] Create `scripts/bootstrap/create-signing-keys.sh` (`--env <name> --profile <p>
+- [x] T012 [P] Create `scripts/bootstrap/create-signing-keys.sh` (`--env <name> --profile <p>
   [--rotate]`). `<name>` is `master` or `sandbox-<username>` (research R19). The script:
   1. generates an RSA-2048 key pair with `openssl`;
   2. writes the private key with `aws ssm put-parameter --type SecureString` to
@@ -152,6 +153,8 @@ that every story needs
      committed;
   4. deletes every temporary private-key file. Use `trap` cleanup and never write under the repo
      (research R8).
+  - **Done:** `--region` defaults to `us-west-2`. `--rotate` passes `--overwrite`; without it the script exits if the parameter exists. Checked against a stubbed `aws`: first run, existing key, rotate, and a failed SSM write (exits non-zero and writes no public key). The temporary directory is removed in every case.
+  - **Security review:** the script refuses to run while AWS CLI history is enabled for the profile, because history records request parameters, including the private key, in plain text.
 - [x] T013 [P] Create `src/lib/content-types.ts`. It exports the `CONTENT_TYPES` ordered array:
   `WEBSITE_TEMPLATE`, `POWERPOINT_TEMPLATE`, `VIDEO`, `IMAGE`, `TEXTURE`, `OTHER`. Each entry has:
   - `label` (e.g., "Website Templates");
@@ -172,6 +175,7 @@ that every story needs
   - throws `Error('ONLY_ALLOWED_DOMAIN')` unless the email ends exactly with `@example.com`;
   - applies to every `triggerSource`, including `PreSignUp_ExternalProvider` (research R3,
     FR-001/002).
+  - **Hosted-domain check (2026-11-07):** now admits only `PreSignUp_ExternalProvider`, and also requires `custom:hd` (Google's `hd` claim) to equal the domain and `email_verified` not to be `"false"`. The session function checks `custom:hd` too.
 - [x] T015 [P] Write unit tests in `tests/unit/auth/pre-sign-up.test.ts`. Cover:
   - `user@example.com` accepted;
   - `USER@Example.com` accepted;
@@ -189,12 +193,13 @@ that every story needs
     `http://localhost:3000/auth/callback/`;
   - `logoutUrls`: `https://content.example.com/` and `http://localhost:3000/`;
   - `triggers: { preSignUp }`.
+  - **Hosted-domain check (2026-11-07):** Google is now an OIDC provider named `GoogleWorkspace` (issuer `https://accounts.google.com`), because only OIDC providers can map Google's `hd` claim, to custom attribute `custom:hd` (mutable). `email_verified` is mapped too. The app signs in with `{ provider: { custom: 'GoogleWorkspace' } }`.
   - **Done:** `example.com` and `content.example.com` come from `ALLOWED_EMAIL_DOMAIN` and `APP_ORIGIN` at synth time (`amplify/config.ts`), so the owner's domain stays out of the repo. The app client's OAuth scopes are `OPENID EMAIL PROFILE`. Because `email` login is on, the client also lists `COGNITO` as a provider; no password UI exists, and `allowAdminCreateUserOnly` blocks self sign-up.
-- [ ] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
+- [x] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
   [data-model.md](./data-model.md#entity-content):
   - enums `ContentType`, `ContentStatus`, `LicenseType`;
   - `archiveBytes` as `a.float()`, and `thumbKeys`/`meta` as `a.json()`;
-  - secondary indexes `index('slug').queryField('listContentBySlug')` and
+  - secondary indexes `index('publishedSlug').queryField('listContentBySlug')` (sparse; see the note below) and
     `index('type').sortKeys(['publishedAt']).queryField('listContentByTypeAndPublishedAt')`;
   - `.authorization(allow => [allow.authenticated().to(['read'])])`;
   - `.disableOperations(['mutations', 'subscriptions', 'queries'])`, so the default
@@ -211,7 +216,9 @@ that every story needs
   Record both outcomes in `specs/001-content-forge-mvp/research.md` (R4).
 
   Export `type Schema`. Don't add `getDownloadUrl` yet; that's T094.
-- [ ] T018 Create `amplify/custom/assets-cdn/construct.ts`, part 1. The `AssetsCdn` construct takes
+  - **Done:** R4 verified at synth (a local `defineBackend` synth, not yet a deployed sandbox). With all three operation groups disabled, the transformer still generates `listContentBySlug` and `listContentByTypeAndPublishedAt` and nothing else: no `getContent`, `listContents`, mutations, or subscriptions. The `ContentType` enum works as the index partition key (a DynamoDB `S` attribute). `tests/unit/data/schema.test.ts` keeps the enum in step with `CONTENT_TYPES`. Confirm the queries answer on the first deploy (T054).
+  - **Security review:** Amplify generates a public query for every index, even without `queryField`, so indexing `slug` made `listContentBySlug` return drafts. The slug index is now sparse, on `publishedSlug` (present only on published items), and `slug` itself is unindexed. The schema test asserts there are exactly two indexes.
+- [x] T018 Create `amplify/custom/assets-cdn/construct.ts`, part 1. The `AssetsCdn` construct takes
   props `{ envName, isProduction, publicKeyPem, userPoolId, userPoolClientId, allowedOrigins,
   assetsDomain?, certificateArn?, hostedZoneId?, hostedZoneName? }`. The four optional props are
   required when `isProduction`, and the construct throws if they're missing (research R19). It
@@ -233,7 +240,10 @@ that every story needs
     distribution ↔ session-function dependency cycle.
 
   Follow [contracts/assets-cdn.md](./contracts/assets-cdn.md) and research R6.
-- [ ] T019 Extend `amplify/custom/assets-cdn/construct.ts`, part 2. Add:
+  - **Done:** the four optional props, plus `budgetAlertEmail` (T019), are required in production. The bucket name is generated (a fixed `content-forge-assets-<env>` could already be taken: S3 names are global) and reported as `custom.assetsBucketName`. The bucket is retained on delete. The distribution also uses `PriceClass_100` (North America and Europe edges, Principle I).
+  - **Security review:** every behavior is `https-only` (no redirect) and sends HSTS and `nosniff`. The default behavior also has the trusted key group, so it stays closed even if the deny function were detached.
+  - **Demo host (research R20, 2026-11-07):** demos moved off the asset host to a second `Distribution` on its own `*.cloudfront.net` host in every environment: origin path `/d` on the same bucket, the same key group on the default behavior, and `/_launch/*` answered by the `demo-launch.js` CloudFront Function (per-demo cookies, then a redirect). A bucket policy statement denies it any object outside `d/`. Public prop `demosDistribution` and `demosBaseUrl`.
+- [x] T019 Extend `amplify/custom/assets-cdn/construct.ts`, part 2. Add:
   - DynamoDB table `DownloadEvents`: PK `contentId`, SK `downloadedAtEmail`, on-demand billing, PITR
     off;
   - an `ssm.StringParameter` `/content-forge/<env>/cloudfront/key-pair-id` set to the public
@@ -243,7 +253,8 @@ that every story needs
     budget is account-wide, so sandboxes don't create one;
   - public readonly props `bucket`, `distribution`, `downloadEventsTable`, `assetsBaseUrl`
     (`https://<asset host>`).
-- [ ] T020 [P] Create `amplify/custom/assets-cdn/session-handler.ts`, a Lambda function URL handler
+  - **Done:** the budget's alert address is a construct prop, which `backend.ts` fills from `BUDGET_ALERT_EMAIL`. The table is retained in production and deleted with a sandbox.
+- [x] T020 [P] Create `amplify/custom/assets-cdn/session-handler.ts`, a Lambda function URL handler
   per [contracts/assets-cdn.md](./contracts/assets-cdn.md#get-_session):
   - **`GET /_session`**: validate `Origin` against `ALLOWED_ORIGINS`. Verify `X-Id-Token` with
     `CognitoJwtVerifier` (`tokenUse: 'id'`). Require an `@example.com` email. Sign cookies with
@@ -258,9 +269,12 @@ that every story needs
   - **Errors**: `401`/`403`/`500` JSON bodies.
   - **SSM**: read the private key, key-pair ID, and asset host from the parameter names in env and
     cache them per container.
-- [ ] T021 Extend `amplify/custom/assets-cdn/construct.ts`, part 3. Add the session Lambda:
+  - **Demo launch (research R20):** `GET /_session/demo/<id>` runs the same checks as `/_session`, reads the item's `status` and `demoEntryPath` (`GetItem`), answers `404` for a missing item, a draft, or no demo, and otherwise returns a 12-hour launch link signed for `https://<demo host>/<id>/*`.
+  - **Done:** the allowed domain comes from env `ALLOW_DOMAIN` (as in pre-sign-up). Unknown paths return `404` and other methods `405`. `email_verified` is checked as boolean or string. **Security review:** cookies are host-only with `Path=/v/` in both modes, so no other host or path receives them, and sign-out no longer reads SSM. A failure to fetch the user pool's signing keys answers `500`, not `401`, so an outage doesn't send users to sign in again.
+- [x] T021 Extend `amplify/custom/assets-cdn/construct.ts`, part 3. Add the session Lambda:
   - a `NodejsFunction` for `session-handler.ts`: `Runtime.NODEJS_24_X`, 256 MB, 5 s timeout,
-    `reservedConcurrentExecutions: 5`, log group retention 14 days;
+    `reservedConcurrentExecutions: 5` (production only since the first sandbox deploy: an account
+    on Lambda's default quota of 10 can't reserve any), log group retention 14 days;
   - env `USER_POOL_ID`, `USER_POOL_CLIENT_ID`, `ALLOWED_ORIGINS`, `COOKIE_MODE`,
     `ASSETS_DOMAIN_PARAM`, `PRIVATE_KEY_PARAM`, `KEY_PAIR_ID_PARAM`;
   - `ssm:GetParameter` plus `kms:Decrypt` scoped to the three parameters;
@@ -268,7 +282,9 @@ that every story needs
   - distribution behavior `/_session*` → `FunctionUrlOrigin.withOriginAccessControl`, with
     `CACHING_DISABLED` and an origin request policy forwarding headers `X-Id-Token` and `Origin`
     (depends on T018–T020).
-- [ ] T022 [P] Write unit tests in `tests/unit/assets/session-handler.test.ts`, mocking the verifier
+  - **Demo launch:** env `DEMOS_DOMAIN` (the demo distribution's domain; no cycle, because the demo distribution doesn't reference the function) and `CONTENT_TABLE`, plus `dynamodb:GetItem` on the catalog table alone. `backend.ts` passes the table as `contentTable`.
+  - **Done:** CORS comes from the Lambda alone, not also a response headers policy: it echoes the one exact allowed origin, and a second source would duplicate headers. The function runs on ARM, bundles the AWS SDK (the CloudFront signer isn't in the Lambda runtime), and gets both `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` permissions for CloudFront from CDK.
+- [x] T022 [P] Write unit tests in `tests/unit/assets/session-handler.test.ts`, mocking the verifier
   and SSM with `aws-sdk-client-mock`. Cover:
   - a valid token gives `204` with exactly three cookies, each with the required attributes;
   - the policy resource is `/v/*` with a 12 h expiry;
@@ -278,28 +294,33 @@ that every story needs
   - signout clears all three cookies;
   - preflight returns the CORS headers;
   - the SSM read is cached across invocations.
-- [ ] T023 [P] Write CDK assertion tests in `tests/infra/assets-cdn.test.ts` that synthesize
+  - **Done:** also covers verified signatures (RSA-SHA1 against the public key), case-insensitive domains, lookalike and sub-domains, unverified email, 500 on an SSM failure, and an SSM retry after a failed read.
+- [x] T023 [P] Write CDK assertion tests in `tests/infra/assets-cdn.test.ts` that synthesize
   `AssetsCdn` in an isolated `App`/`Stack`, once with `isProduction: true` and once as a sandbox.
   Generate the `publicKeyPem` at test time with `crypto.generateKeyPairSync`. Assert:
   - the bucket blocks all public access;
   - an OAC exists for S3 and for Lambda;
   - `/v/*` and `/a/*` have `TrustedKeyGroups`, and `/a/*` uses the CachingDisabled policy;
   - there's no `AWS::EC2::NatGateway`, `AWS::EC2::VPC`, or Lambda `VpcConfig`;
-  - the function URL `AuthType` is `AWS_IAM`, and reserved concurrency is 5;
+  - the function URL `AuthType` is `AWS_IAM`, and reserved concurrency is 5 in production and
+    absent in sandboxes;
   - in production, the budget exists with a $5 limit, and the distribution has the alias and a
     Route 53 record;
   - in sandbox mode, there's no budget, alias, or Route 53 record, and the session function's
     `COOKIE_MODE` is `cross-site`;
   - log retention is 14 days;
   - constructing with `isProduction: true` and no `certificateArn` throws.
-- [ ] T024 [P] Write a guard test in `tests/infra/function-logging.test.ts` (Principle I: bounded
+  - **Done:** also checks the S3 TLS-only policy, the SSM and KMS scoping, the download table, the SSM outputs, and that production refuses to synth without `certificateArn`, `hostedZoneId`, or `budgetAlertEmail`. Bundling is skipped in these tests.
+- [x] T024 [P] Write a guard test in `tests/infra/function-logging.test.ts` (Principle I: bounded
   logs). It globs `amplify/**/resource.ts`, and for every file that calls `defineFunction(`,
   asserts the call sets `logging: { retention: '2 weeks' }`. This catches a new function added
   without bounded log retention, which the `AssetsCdn` synth test can't see.
-- [ ] T025 Create `amplify/backend.ts`:
+- [x] T025 Create `amplify/backend.ts`:
   - `defineBackend({ auth, data, preSignUp })`;
   - `envName` is `process.env.AWS_BRANCH` when set, otherwise `sandbox-<os.userInfo().username>`,
-    and `isProduction = envName === 'master'` (research R19);
+    and `isProduction = envName === 'master'` (research R19). **Done:** `amplify/environment.ts`
+    rejects names the key script can't bootstrap (`tests/unit/environment.test.ts` keeps the two
+    patterns in step);
   - read `amplify/custom/assets-cdn/keys/<envName>.public-key.pem`. If it's missing, throw an error
     telling the developer to run `scripts/bootstrap/create-signing-keys.sh --env <envName>`;
   - `backend.createStack('assets')` with `new AssetsCdn(...)`, fed from `backend.auth.resources`,
@@ -311,8 +332,9 @@ that every story needs
   - `backend.addOutput({ custom: { assetsBaseUrl, assetsBucketName, contentTableName:
     backend.data.resources.tables['Content'].tableName, region } })`, per
     [contracts/data-api.md](./contracts/data-api.md#custom-outputs-amplify_outputsjson--custom).
-  - **Progress (auth):** `amplify/backend.ts` defines `auth` and `preSignUp`, with the `allowAdminCreateUserOnly` and 7-day refresh-token overrides (checked by a local synth). Still to do: `data`, `envName`, the signing key, the `assets` stack, and the custom outputs.
-- [ ] T026 Create `amplify.yml`:
+  - **Progress (auth):** `amplify/backend.ts` defines `auth` and `preSignUp`, with the `allowAdminCreateUserOnly` and 7-day refresh-token overrides (checked by a local synth). **Done:** `data`, `envName`, the signing key, the `assets` stack, and the custom outputs are in. Production's asset domain and zone name come from `ASSETS_DOMAIN` and `HOSTED_ZONE_NAME` (`amplify/config.ts`, defaulting to `assets.example.com` and its parent). A local synth of both a branch environment and `master` passes.
+  - **Security review:** guest (unauthenticated) identities are off on the identity pool, and production refuses to synth unless `ALLOWED_EMAIL_DOMAIN`, `APP_ORIGIN`, and `ASSETS_DOMAIN` are set.
+- [x] T026 Create `amplify.yml`:
   - `backend.phases.build`: `nvm install 24 && nvm use 24`, `npm ci`,
     `npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID`;
   - `frontend.phases.preBuild`: `aws s3 cp "$FONTS_S3_URI" src/app/fonts/ --recursive` (the
@@ -326,6 +348,7 @@ that every story needs
     `style-src 'unsafe-inline'`. Don't drop either.
 
   Research R2, R18.
+  - **Done, with one change:** the response headers and the 404 rewrite aren't in `amplify.yml`. Amplify has deprecated `customHeaders` there, and the CSP must name the real asset host, which stays out of this public repo. `scripts/hosting/apply-settings.sh` builds the R18 headers from `ASSETS_DOMAIN` (`scripts/hosting/custom-headers.mjs`, unit-tested against R18) and applies them with `aws amplify update-app`, like the beta deploy. The cache holds `.npm/` rather than `node_modules/`, which `npm ci` replaces anyway.
 - [ ] T027 (owner) Run the one-time bootstrap from [quickstart.md](./quickstart.md#2-one-time-bootstrap-documented-exceptions-to-everything-as-code):
   1. deploy `infra/edge-cert`;
   2. run `scripts/bootstrap/create-signing-keys.sh --env master` and commit
@@ -491,7 +514,7 @@ without a session are denied (quickstart V1–V4, V12).
 
 - [ ] T047 [US1] Implement the landing page in `src/app/page.tsx`:
   - logo from `public/brand/logo-white.svg` (owner supplies the file), a one-line description, and
-    a React Aria `Button` "Sign in with Google" that calls `signInWithRedirect({ provider: 'Google' })`;
+    a React Aria `Button` "Sign in with Google" that calls `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })` (research R3);
   - the error banner reads `?error=` through `useSearchParams` inside `<Suspense>`;
   - an existing session triggers `router.replace('/browse/')`;
   - no catalog data is fetched (FR-002–FR-004).
@@ -533,6 +556,7 @@ without a session are denied (quickstart V1–V4, V12).
     `retentionInDays: 14` (Principle I);
   - run quickstart V1–V4 and V12, and record the R3 outcome in
     `specs/001-content-forge-mvp/research.md`.
+  - **Sandbox run (2026-11-07):** the first personal sandbox deployed (after making reserved concurrency production-only). A Workspace account's first Google sign-in created the user with `custom:hd` set, so R3's `allowAdminCreateUserOnly` question is answered for sandboxes. `/_session` with that user's ID token returned `204` and a 12-hour `X-Session-Expires`. Still to do on `master`: everything above.
 
 **Checkpoint**: US1 works on its own. Only allowed accounts get in, and nothing in the catalog is
 exposed.
@@ -588,7 +612,8 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - one failing item doesn't stop the batch;
   - `--dry-run` makes zero AWS calls;
   - old `v/` keys are deleted only after the record is written;
-  - `--draft` omits `publishedAt`.
+  - `--draft` omits `publishedAt` and `publishedSlug`;
+  - re-importing a published item with `--draft` removes both attributes (absent, not null).
 - [ ] T060 [P] [US4] Write unit tests in `tests/unit/ingest/cli.test.ts` covering argument parsing
   for `batch`/`one`/`doctor` and exit codes `0`/`1`/`2`/`3`, per
   [contracts/ingest-cli.md](./contracts/ingest-cli.md#output).
@@ -603,7 +628,7 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
     reason in the report;
   - assert, per fixture: the detected type; the `a/<id>/<file>` archive upload with its
     `Content-Disposition`; the expected `v/` keys, all sharing one import hash; that thumbnails
-    decode as WebP (`sharp(...).metadata()`); `demo/**` uploads only for the template; and the
+    decode as WebP (`sharp(...).metadata()`); `d/<id>/**` uploads only for the template; and the
     DynamoDB record (`demoEntryPath`, `meta.slideCount === 3`, video `meta.durationSeconds` ≈ 3,
     image dimensions);
   - run it a second time with the first run's state and the mocked `findBySlug` results. Every
@@ -670,15 +695,16 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - `uploadViewable`: correct `ContentType` from an extension map (html, css, js, mjs, json, svg,
     png, jpg, webp, gif, woff, woff2, ttf, mp4, webm), with
     `CacheControl: public, max-age=31536000, immutable` for hashed keys and `max-age=3600` for
-    `demo/**`;
-  - `uploadDemoFolder`: uploads the folder under `v/<id>/demo/`;
+    `d/**`;
+  - `uploadDemoFolder`: uploads the folder under `d/<id>/`, the demo host's prefix (research R20).
+    Every file needs its `ContentType`, because the demo host sends `nosniff`;
   - `deleteKeys`: batch delete.
 - [ ] T073 [P] [US4] Implement `tools/ingest/aws/content-table.ts`:
-  - `findBySlug(slug)` queries the `bySlug` GSI;
+  - `findBySlug(slug)` looks the slug up in a projected `Scan` (`id`, `slug`), read once per run. There's no slug GSI to query: it would be public through the API (T017);
   - `putContent(record, existing?)` writes all [data-model](./data-model.md#entity-content)
     fields plus the Amplify attributes `id`, `__typename: 'Content'`, `createdAt`, `updatedAt`;
-  - for an existing item, it keeps `id`, `downloadCount`, and `publishedAt`;
-  - for a draft, it omits `publishedAt` entirely (sparse index).
+  - for an existing item, it keeps `id` and `downloadCount`. A published item keeps its `publishedAt` (or gets one if it was a draft) and gets `publishedSlug`;
+  - a draft has neither `publishedAt` nor `publishedSlug`, including a published item being turned back into a draft. Both must be absent, not null, or the draft stays in the sparse indexes (PR #134 re-review).
 - [ ] T074 [P] [US4] Implement `tools/ingest/report/report.ts`, which writes `ingest-report.json`
   in the [data-model shape](./data-model.md#entity-import-report-local-file) plus a console summary,
   and `tools/ingest/report/state.ts`, which reads and writes `.ingest-state.json` keyed by source
@@ -691,7 +717,7 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   5. generate previews by type;
   6. if `--dry-run`, stop here and report;
   7. `findBySlug`;
-  8. upload `a/`, then `v/` (plus `demo/` for templates);
+  8. upload `a/`, then `v/` (plus `d/<id>/` for templates);
   9. `putContent`;
   10. delete superseded `v/` keys;
   11. update state;
@@ -871,7 +897,7 @@ goes up by one. Unknown slugs show not-found (quickstart V6, V7).
     (research R9).
 - [ ] T096 [P] [US3] Add `getBySlug(slug)` and `requestDownloadUrl(contentId)` to
   `src/lib/data/content.ts`:
-  - `getBySlug` uses `listContentBySlug` and returns the first item, or `null` when it's missing
+  - `getBySlug` uses `listContentBySlug(publishedSlug)` and returns the first item, or `null` when it's missing
     or not `PUBLISHED`. If there's more than one match, it logs a warning;
   - `requestDownloadUrl` maps GraphQL `errors[].errorType` to a typed error.
   - **Progress (beta preview):** `getBySlug` and `requestDownloadUrl` exist, backed by the demo catalog (downloads return the `BetaPreview` error). Still to do: AppSync and the `errorType` mapping.
@@ -926,21 +952,30 @@ working. The demo URL is denied without a session, and demo code can't see app t
   - no `demoEntryPath` plus an `externalDemoUrl` shows Vendor demo;
   - otherwise neither shows;
   - non-template types never show Live Demo.
-- [ ] T102 [P] [US5] Write E2E tests in `tests/e2e/us5-live-demo.spec.ts`: Live Demo opens a popup
-  at `https://assets.e2e.test/v/<id>/demo/<entry>` with `noopener`, the vendor demo link has
+- [ ] T102 [P] [US5] Write E2E tests in `tests/e2e/us5-live-demo.spec.ts`: Live Demo calls the
+  mocked `/_session/demo/<id>`, opens a tab whose `opener` is `null`, and sends it to the returned
+  launch link; an error closes the tab and shows a toast; the vendor demo link has
   `target=_blank` and `rel="noopener noreferrer"`, and the WordPress-type fixture has neither
   button.
 - [ ] T103 [P] [US5] Create `tests/smoke/us5-demo.smoke.ts`. Against the deployed environment:
   - open a demo, then assert the page loads with no failed CSS or JS requests;
   - assert `localStorage.length === 0` on the demo origin;
-  - assert a context with no cookies gets `403` for the same URL.
+  - assert a context with no cookies gets `403` for the same URL;
+  - assert the demo host isn't under the owner's domain, and that a demo's cookies aren't sent to
+    another demo's path.
 - [x] T104 [US5] Add `demoUrl(item)` to `src/lib/assets/asset-url.ts`. It builds
   `<assetsBaseUrl>/v/<id>/demo/<demoEntryPath>`, encodes each path segment, and refuses paths with
-  `..` (FR-034).
+  `..` (FR-034). Beta preview only since research R20: real demos open through launch links (T129).
 - [x] T105 [US5] Add **Live Demo** and **Vendor demo** to `src/components/detail/detail-actions.tsx`
   following the action rules. Live Demo calls `window.open(demoUrl(item), '_blank', 'noopener')`.
   Vendor demo is an external React Aria `Link` with `target="_blank"` and
   `rel="noopener noreferrer"` (FR-026–FR-028).
+- [ ] T129 [US5] Switch Live Demo to launch links (research R20, contracts/assets-cdn.md "Client
+  obligations"), added 2026-11-07. Outside the beta preview, the click handler opens a blank tab
+  synchronously, sets its `opener` to `null`, fetches `<assetsBaseUrl>/_session/demo/<id>` with
+  the ID token, and points the tab at the returned `url`. On an error it closes the tab and shows
+  a toast (`404`: "This demo is no longer available."; `401`: sign in again; otherwise: try
+  again). `demoUrl()` (T104) stays for the beta preview's local demos only. Depends on T020.
 
 **Checkpoint**: Website templates can be evaluated without downloading them.
 
@@ -1052,7 +1087,7 @@ download increases the item's displayed count by one.
 - [ ] T122 [P] Create `scripts/ci/check-bundle.mjs`, which fails if `out/` contains
   `-----BEGIN`, AWS secret-key patterns, `GOOGLE_CLIENT_SECRET`, or `.pem` files, and add it to
   `.github/workflows/ci.yml` after the build (Principle II: no secrets in bundles).
-- [ ] T123 Tighten the CSP's `connect-src` in `amplify.yml` to the exact endpoints seen in
+- [ ] T123 Tighten the CSP's `connect-src` in `scripts/hosting/custom-headers.mjs` to the exact endpoints seen in
   production (the AppSync host, the Cognito domain, `cognito-idp.us-west-2.amazonaws.com`), keeping
   the rest of the research R18 policy, confirm no console CSP
   violations on deployed pages, and record the final policy in

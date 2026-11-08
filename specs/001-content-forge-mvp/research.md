@@ -59,27 +59,73 @@ they're the first tasks of implementation.
 ## R3. Authentication: Cognito + Google Workspace
 
 - **Decision**:
-  - `defineAuth` with `externalProviders.google` (`clientId`/`clientSecret` from Amplify
-    `secret()`), scopes `openid email profile`, and `attributeMapping` for email, name, picture.
+  - `defineAuth` with Google as an **OIDC provider** named `GoogleWorkspace` (issuer
+    `https://accounts.google.com`, `clientId`/`clientSecret` from Amplify `secret()`), scopes
+    `openid email profile`, and `attributeMapping` for email, `email_verified`, name, picture, and
+    Google's hosted-domain claim `hd` → custom attribute `custom:hd`. The app signs in with
+    `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })`.
   - Callback URL `https://content.example.com/auth/callback/` plus a localhost equivalent for
     sandboxes. Logout URL `/`.
-  - A `preSignUp` trigger (`amplify/auth/pre-sign-up/`) rejects any email that doesn't end in
-    `@example.com`, for every trigger source including `PreSignUp_ExternalProvider`.
+  - A `preSignUp` trigger (`amplify/auth/pre-sign-up/`) admits only `PreSignUp_ExternalProvider`
+    sign-ups whose `custom:hd` is `example.com`, whose email ends in `@example.com`, and whose
+    email isn't unverified. Every other trigger source is refused.
+  - The session function (R7) repeats the `custom:hd` check on every asset session and demo launch,
+    so it also covers sign-ins after the first: Cognito rewrites mapped attributes each time.
   - The Google OAuth consent screen is set to **Internal** (defense in depth).
   - Self-service sign-up is turned off (`allowAdminCreateUserOnly: true` through a CDK override), and
-    the UI only calls `signInWithRedirect({ provider: 'Google' })`.
+    the UI only calls `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })`.
+  - The app client gives out tokens only through Google (CDK overrides, checked by
+    `tests/infra/auth-client.test.ts`):
+    - the only identity provider is `GoogleWorkspace`, not `COGNITO`, so there's no Cognito sign-in
+      form;
+    - the only explicit auth flow is `ALLOW_REFRESH_TOKEN_AUTH`, so no SRP or custom auth;
+    - OAuth allows only the code flow and the scopes `openid email profile`.
   - Tokens use Amplify's default storage (app-origin `localStorage`). The refresh-token lifetime is
     7 days.
 - **Rationale**:
   - Amplify's documented email-domain-filtering pattern is a pre-sign-up trigger, which runs server
     side (Principle II).
-  - Google's `hd` parameter can't reliably be passed through the Cognito Hosted UI, so the
-    Internal consent screen plus the trigger replace it.
+  - Google's guidance is to check the `hd` claim, not the email domain alone: a consumer Google
+    account can use an address in a Workspace domain, and only Workspace accounts carry `hd`.
+  - Cognito's built-in Google provider reads Google's People API, which has no `hd` field. For OIDC
+    providers, Cognito validates Google's ID token (signature, issuer, audience, expiry) and maps
+    claims from it and from the userinfo response, so `hd` can be mapped. An account without it
+    gets no `custom:hd`, and every check fails closed.
+  - The `hd` **request parameter** is only a hint to Google's account picker, and can't reliably be
+    passed through the Cognito Hosted UI, so it's not relied on. The Internal consent screen stays
+    as a further layer.
   - A trigger error makes Cognito redirect to the callback with `error_description`, which the
     callback page maps to the "authorized accounts only" message.
-- **Verify in spike**: that `allowAdminCreateUserOnly` doesn't block first-time federated
+  - **Users can't rewrite their own `custom:hd` or email** (2026-11-07 review). Cognito lets a user
+    change their own attributes with `UpdateUserAttributes`, and requires the app client to have
+    write access to every mapped attribute, or federated sign-in fails. So `custom:hd` and `email`
+    stay writable. The guard is the scope instead: `UpdateUserAttributes` needs an access token with
+    `aws.cognito.signin.user.admin`. SRP and custom-auth tokens always carry it, and the OAuth
+    flow carries it only if requested. The client allows neither, and federated users have no
+    password. Each Google sign-in also rewrites both attributes from Google's token.
+- **Verify in spike**: that a Workspace account's first sign-in maps `custom:hd` (check the user's
+  attributes in the user pool), and that a personal Gmail account is refused. Also that
+  `allowAdminCreateUserOnly` doesn't block first-time federated
   sign-in. If it does, leave self-sign-up on. The pre-sign-up trigger still enforces the domain, and
   no password UI is exposed.
+- **Spike outcome (2026-11-07, personal sandbox)**: a Workspace account's first Google sign-in
+  created the user with `custom:hd` set to the Workspace domain, through the pre-sign-up trigger's
+  stricter checks. So the OIDC mapping of `hd` works, and `allowAdminCreateUserOnly: true` doesn't
+  block first-time federated sign-in. Still to confirm on `master` (T054).
+- **Verified on a sandbox (2026-11-07)**: Google sign-in works with these client settings. The
+  sign-in access token and one from `GetTokensFromRefreshToken` both carry only `openid profile
+  email`, and `UpdateUserAttributes` refuses both with `NotAuthorizedException` (quickstart V2). The
+  docs don't say whether a refreshed token keeps the original scopes. This check shows it does.
+- **Residual risk** (accepted 2026-11-07, after the PR #134 re-review): leaving the Workspace
+  doesn't end access at once. Cognito renews a session from its own refresh token without asking
+  Google, and the session function checks `custom:hd` and email, which change only at a Google
+  sign-in. So a suspended account keeps working until its refresh token expires, up to 7 days, and
+  its asset and demo cookies last up to 12 hours more.
+  - Accepted because the catalog is internal and the users are one small team. A shorter refresh
+    token would mean more sign-ins for everyone, to cover an event the owner can handle directly.
+  - Offboarding (quickstart §8) signs the user out everywhere and disables them. That ends refresh
+    at once. An ID token already issued still verifies for up to an hour and can get new 12-hour
+    cookies, so access ends within about 13 hours.
 - **Alternatives considered**:
   - Auth.js: needs a server, so it's rejected for static export.
   - Cognito custom domain (`auth.example.com`): needs another us-east-1 cert. The Cognito prefix
@@ -91,7 +137,7 @@ they're the first tasks of implementation.
   - One Amplify Data model, `Content`, with `allow.authenticated().to(['read'])`. There's no create,
     update or delete through the API.
   - Secondary indexes:
-    - `bySlug` (`slug`), used by the detail page;
+    - `byPublishedSlug` (`publishedSlug`, sparse), used by the detail page;
     - `byTypeAndPublishedAt` (`type` + `publishedAt`), used for browse rows.
   - **Drafts have no `publishedAt` attribute**, so they never appear in the sparse type index. Rows
     need no status filter, and pagination with `limit` stays accurate.
@@ -105,6 +151,16 @@ they're the first tasks of implementation.
     to signed-in users through the API (they aren't secret).
   - That an enum field (`type`) works as an index partition key. If it doesn't, store `type` as
     `a.string()` validated against `CONTENT_TYPES` by ingest.
+- **Spike outcome (2026-11-06, local synth; T017)**: both hold. With mutations, subscriptions, and
+  queries disabled, the transformer generates exactly `listContentBySlug` and
+  `listContentByTypeAndPublishedAt`, with their resolvers and indexes, and no `getContent` or
+  `listContents`. The `ContentType` enum works as the index partition key (stored as a DynamoDB
+  `S` attribute).
+  - **Correction (security review):** the first version indexed `slug` itself, and Amplify gives
+    every index a public query, even without `queryField`, so `listContentBySlug` returned drafts.
+    The slug index is now sparse too, on `publishedSlug`, which only published items carry.
+    `slug` stays unindexed, and ingest checks slug uniqueness with a table scan.
+  - Still to confirm against a deployed backend: that both queries answer (T054).
 - **Rationale**:
   - Users only read. All writes come from the owner's ingest or from the download Lambda, which
     gives least privilege.
@@ -137,14 +193,15 @@ they're the first tasks of implementation.
   - A custom CDK construct `AssetsCdn` in `backend.createStack('assets')` owns:
     - the **S3 bucket**: block public access, Intelligent-Tiering lifecycle for `a/`, SSE-S3;
     - the **CloudFront distribution**: OAC to S3, custom domain + ACM cert from R10, Route 53 alias;
+    - the **demo distribution** on its own `*.cloudfront.net` host (R20);
     - the **trusted key group**;
     - the **session Lambda** + function URL;
     - the **`DownloadEvents` table**;
     - an **AWS Budget** ($5/month, created only in the `master` environment; see R19);
     - log retention.
   - Behaviors:
-    - `/v/*` (previews + demos): trusted key group, CachingOptimized, long TTL. Keys are
-      content-hashed (R14), so objects are immutable.
+    - `/v/*` (previews): trusted key group, CachingOptimized, long TTL. Keys are content-hashed
+      (R14), so objects are immutable. Demos aren't served here (R20).
     - `/a/*` (archives): trusted key group, CachingDisabled, so archives are never cached at the edge.
     - `/_session*`: Lambda function URL origin with OAC, CachingDisabled. The origin request policy
       forwards `X-Id-Token` and `Origin`. A response headers policy sends CORS for
@@ -159,7 +216,8 @@ they're the first tasks of implementation.
 - **Alternatives considered**:
   - Amplify Storage `getUrl()` presigned S3 URLs: thumbnails can't be cached because each URL is
     unique, and egress is billed at S3 rates.
-  - Two distributions: more resources for no isolation gain.
+  - Separate distributions for previews and archives: more resources for no isolation gain. (Demos
+    are the exception: they need a separate site, R20.)
 
 ## R7. Asset session endpoint (signed cookies)
 
@@ -169,16 +227,19 @@ they're the first tasks of implementation.
   - The Lambda verifies the token with `aws-jwt-verify` (user pool, client ID, `token_use=id`) and
     checks the `email` domain. It then returns `204` with three `Set-Cookie` headers:
     `CloudFront-Policy`, `CloudFront-Signature`, `CloudFront-Key-Pair-Id`.
-  - Cookie attributes in production: `Domain=assets.example.com; Path=/; Secure; HttpOnly;
-    SameSite=Lax`, 12 h expiry. Personal environments use cross-site cookies instead (R19).
+  - Cookie attributes in production: host-only, `Path=/v/; Secure; HttpOnly; SameSite=Lax`, 12 h
+    expiry. Personal environments use cross-site cookies instead (R19).
   - `GET /_session/signout` clears the cookies.
   - The function URL uses `AuthType AWS_IAM` behind **OAC**, so it can't be invoked directly.
-    Reserved concurrency is 5 to cap abuse cost.
+    Reserved concurrency is 5 to cap abuse cost, in production only: Lambda keeps 10 unreserved
+    executions per account, so an account on the default quota of 10 can't reserve any (seen on
+    the first sandbox deploy). Production's account needs a concurrency quota of at least 15
+    (quickstart §2).
 - **Rationale**:
   - Cookies for `assets.` have to be set by a response from `assets.`.
   - `content.` and `assets.` are **same-site** (same registrable domain), so `SameSite=Lax` cookies
-    are first-party and get sent on `<img>`, `<video>` and new-tab demo requests. That avoids
-    third-party-cookie blocking.
+    are first-party and get sent on `<img>` and `<video>` requests. That avoids third-party-cookie
+    blocking.
   - The token travels in a custom header because OAC signs the origin request with SigV4 in the
     `Authorization` header, so a viewer's `Authorization` header can't reach the origin.
   - Using GET means there's no request body, which avoids OAC's payload-hash requirement for Lambda
@@ -335,7 +396,7 @@ they're the first tasks of implementation.
   | Video | `ffprobe -show_format -show_streams -of json`. Poster: `ffmpeg -ss <10%> -frames:v 1`. Preview: `ffmpeg -t 30 -vf scale=-2:720 -c:v libx264 -crf 28 -preset veryfast -an -movflags +faststart` |
   | Images/textures | `sharp` → WebP 320/640/1280 (and 2048 for detail), dimensions recorded |
   | Keys | `v/<id>/<name>.<importHash>.<ext>`. `importHash` is 8 hex chars, generated once per item per import run (SHA-256 of the source hash plus the run's start time) and shared by all of that item's generated files. Every re-import, including `--force`, gets new keys, so cached objects are never overwritten and stay immutable. Superseded keys are deleted after the record is written. Archives go to `a/<id>/<originalFilename>` |
-  | Identity | `slug` = kebab-case of the title or filename (overridable). Re-imports look up `bySlug` and keep the existing `id` (FR-037, SC-009) |
+  | Identity | `slug` = kebab-case of the title or filename (overridable). Re-imports find the existing item by slug (a projected table scan) and keep its `id` (FR-037, SC-009) |
   | Resume | `.ingest-state.json`, holding a per-item content hash and completed steps |
   | Report | `ingest-report.json` + a console summary |
 
@@ -388,7 +449,7 @@ they're the first tasks of implementation.
 | AppSync | < 100k requests | ≤ $0.40 |
 | DynamoDB on-demand (2 tables) | Tiny reads/writes, < 25 GB | ≤ $0.10 |
 | Lambda (3 functions) | < 100k invocations | $0 (always-free tier) |
-| CloudFront | < 1 TB transfer, < 10M requests | $0 (always-free tier) |
+| CloudFront (2 distributions, 2 functions) | < 1 TB transfer, < 10M requests, < 2M function invocations, shared across both | $0 (always-free tier) |
 | SSM Parameter Store (standard) | 2–4 params | $0 |
 | Route 53 | Existing zone, alias queries free | $0 incremental |
 | ACM certificate | Public cert | $0 |
@@ -434,15 +495,20 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
 
 - **Decision**: there are two kinds of environment, chosen in `amplify/backend.ts` by
   `envName`: `process.env.AWS_BRANCH` when set, otherwise `sandbox-<os.userInfo().username>`.
+  It names the key file and the SSM parameters, so `amplify/environment.ts` accepts only `master`
+  and `sandbox-[A-Za-z0-9._-]+`, the names the key script accepts, and stops synth otherwise (a
+  branch such as `feature/x` would otherwise produce a nested parameter path no script can create).
 
   | Aspect | `master` (production) | Personal sandbox (`npx ampx sandbox`) |
   |---|---|---|
   | App origin | `https://content.example.com` (Amplify Hosting) | `http://localhost:3000` (`next dev`) |
   | Asset domain | `assets.example.com`: custom domain, us-east-1 cert, Route 53 alias | The distribution's own `*.cloudfront.net` domain. No cert, no DNS record |
-  | Asset cookies | `Domain=assets.example.com; SameSite=Lax` (same-site) | Host-only (no `Domain`), `SameSite=None; Secure; HttpOnly` (cross-site) |
+  | Asset cookies | Host-only, `Path=/v/; SameSite=Lax` (same-site) | Host-only, `Path=/v/; SameSite=None; Secure; HttpOnly` (cross-site) |
   | `/_session` allowed origin | `https://content.example.com` | `http://localhost:3000` |
+  | Demo host | The demo distribution's own `*.cloudfront.net` domain (R20) | The same, per sandbox |
   | Signing keys | `/content-forge/master/...`, `keys/master.public-key.pem` | `/content-forge/sandbox-<user>/...`, `keys/sandbox-<user>.public-key.pem` |
   | AWS Budget | Yes (one per account covers all environments) | No |
+  | Session function reserved concurrency | 5 | None (the account quota caps it) |
   | CSP headers | Yes (R18) | None (`next dev`) |
 
   - The Lambdas read the asset domain from SSM `/content-forge/<env>/assets/domain`, written by the
@@ -457,9 +523,83 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
     be sent from local development.
   - A budget is account-wide. Creating it per environment would fail on the duplicate name.
 - **Known limitation**: sandbox previews rely on third-party cookies. Browsers that block them
-  (Safari, Firefox in strict mode) won't show sandbox previews or demos. Use Chrome for local
-  development. Production isn't affected.
+  (Safari, Firefox in strict mode) won't show sandbox previews. Use Chrome for local development.
+  Production isn't affected, and demos work everywhere: their cookies are first-party (R20).
 - **Alternatives considered**:
   - Per-sandbox subdomains (`<user>.assets.example.com`): still cross-site from `localhost`,
     plus a cert and DNS record for each.
   - One shared key pair: a sandbox function could then sign cookies production accepts.
+
+## R20. Demo isolation: a separate site for template code
+
+- **Decision**:
+  - Template demos are served by a **second CloudFront distribution on its own `*.cloudfront.net`
+    host**, in every environment, never a subdomain of the owner's domain. Its only origin is the
+    asset bucket with origin path `/d`, so demo URLs are `https://<demo host>/<id>/<path>` →
+    S3 `d/<id>/<path>`. A bucket policy statement also denies it any object outside `d/`.
+  - The asset host stops serving demos. Previews stay on `assets.example.com`, where same-site
+    cookies work in every browser (R7).
+  - **Opening a demo** (contracts/assets-cdn.md):
+    1. The app calls `GET https://assets.example.com/_session/demo/<id>` with the ID token, as for
+       `/_session`. The session function checks the token, the domain and the `Origin`, then reads
+       the item: it must be published and have a `demoEntryPath`, otherwise `404`.
+    2. It signs a custom policy for `https://<demo host>/<id>/*` (12 h) and returns a launch link,
+       `https://<demo host>/_launch/<id>/<entry>?p=…&s=…&k=…`, carrying the three cookie values.
+    3. The app opens the link in a new tab. A CloudFront Function on `/_launch/*` sets the values as
+       cookies scoped to `Path=/<id>/` and redirects to `/<id>/<entry>`. It verifies nothing:
+       CloudFront checks the cookies against the key group on every demo request.
+  - Cookies: host-only, `Path=/<id>/; Secure; HttpOnly; SameSite=Lax`, 12 h, the same lifetime as
+    the preview session.
+- **Rationale**:
+  - `cloudfront.net` is on the Public Suffix List, so each distribution host is its own site. A
+    hostile template can no longer set cookies on the owner's domain, send same-site requests to
+    the company's other apps, or phish on a company hostname. That replaces the accepted risk
+    recorded on 2026-11-07 (constitution 1.1.0, Principle II).
+  - The cookies are set during a top-level navigation to the demo host, so they're first-party in
+    every browser, including Safari and Firefox, which block or partition third-party cookies. A
+    cookie handed out by the app's `fetch` would have been third-party.
+  - **Automatable** (constitution Principle III): adding a demo is an upload under `d/<id>/` and a
+    `demoEntryPath` on the record. Nothing about the distributions, DNS or certificates changes per
+    demo, and the design doesn't depend on the content type, so other types can get hosted demos
+    the same way.
+  - Per-demo cookie paths mean a demo only receives its own cookies. Demos share one origin, so a
+    demo can still read another demo the user opened in the last 12 hours, which FR-027 allows.
+  - 12 hours, not shorter: a demo tab has no token, so it can't renew its own cookies, and FR-029
+    requires open demos to keep working through a session. Reopening a demo from the app renews it.
+  - No new secret, Lambda, or endpoint on the demo host: the same key group verifies both hosts,
+    and every policy names its host, so a preview cookie can't open a demo or the reverse.
+  - Cost: $0. Both distributions and both functions share CloudFront's always-free allowance (R17).
+- **Residual risks** (accepted 2026-11-07, after the PR #134 review):
+  - A launch link is a bearer credential for that one demo for 12 hours. Anyone who copies it, for
+    example from browser history or a shared screen, can open that demo without signing in until it
+    expires. It lives only in the app's memory and the new tab's first request, and the redirect
+    keeps it out of referrers, but the browser may still record it in history.
+  - Signing out doesn't end demo access. The demo cookies are on another site, so the app can't
+    clear them, and they last until they expire.
+  - Accepted because a link only opens one third-party template, not catalog data or downloads, and
+    only a signed-in domain user can get one. A link shorter-lived than its cookies would need its
+    own signature, checked in the CloudFront Function with a key in CloudFront KeyValueStore. That's
+    machinery for a small gain. Shortening both to well under 12 hours would break open demos
+    mid-session (FR-029).
+  - Templates share the demo origin's storage (`localStorage`, cookies they set themselves). A
+    template could break another template's demo, which costs nothing but a reopen.
+  - Phishing is still possible on the demo host, but on a random `*.cloudfront.net` name that
+    carries no company trust.
+  - The demo host has no TLS 1.2 floor (2026-11-07 re-review). CloudFront applies a minimum
+    protocol version only to a custom certificate, and the demo host always uses the default
+    `*.cloudfront.net` one, which still accepts TLS 1.0 and 1.1. The same holds for a sandbox's
+    asset host. It's HTTPS only with HSTS, and current browsers no longer offer TLS below 1.2, so a
+    downgrade needs an outdated client. Production's asset host is on the custom domain, at TLS 1.2.
+- **Alternatives considered**:
+  - A separate registrable domain: the same isolation for about $15 a year, and a domain to keep.
+  - Each demo in its own Amplify Hosting app on `*.amplifyapp.com` (also a public suffix, so
+    per-demo sites): static Amplify apps have no server-side access control beyond a shared
+    password, so the demo would be public to anyone with the URL, and the app's tokens would have
+    to be handed to the demo origin, where template code could read them. Also 25 apps per region
+    by default.
+  - One distribution per demo: per-demo sites with server-side checks, but ingest would create
+    CloudFront resources per item (minutes each, a quota of about 200), against the automation
+    rule.
+  - A CSP `sandbox` header on demos: doesn't remove the shared site, and would likely stop the
+    demo's own files from loading, because a sandboxed page's requests count as cross-site.
+
