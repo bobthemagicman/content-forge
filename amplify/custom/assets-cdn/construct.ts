@@ -136,6 +136,8 @@ export class AssetsCdn extends Construct {
     });
     // The origin path confines this distribution to d/, so demo URLs are /<id>/<path>.
     const demoOrigin = origins.S3BucketOrigin.withOriginAccessControl(this.bucket, { originPath: "/d" });
+    // No minimumProtocolVersion: CloudFront applies one only to a custom certificate, and this host
+    // always uses the default *.cloudfront.net one, which allows TLS 1.0 and 1.1 (research R20).
     this.demosDistribution = new cloudfront.Distribution(this, "DemosDistribution", {
       comment: `Content Forge demos (${props.envName})`,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
