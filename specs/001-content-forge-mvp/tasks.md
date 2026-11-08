@@ -273,7 +273,8 @@ that every story needs
   - **Done:** the allowed domain comes from env `ALLOW_DOMAIN` (as in pre-sign-up). Unknown paths return `404` and other methods `405`. `email_verified` is checked as boolean or string. **Security review:** cookies are host-only with `Path=/v/` in both modes, so no other host or path receives them, and sign-out no longer reads SSM. A failure to fetch the user pool's signing keys answers `500`, not `401`, so an outage doesn't send users to sign in again.
 - [x] T021 Extend `amplify/custom/assets-cdn/construct.ts`, part 3. Add the session Lambda:
   - a `NodejsFunction` for `session-handler.ts`: `Runtime.NODEJS_24_X`, 256 MB, 5 s timeout,
-    `reservedConcurrentExecutions: 5`, log group retention 14 days;
+    `reservedConcurrentExecutions: 5` (production only since the first sandbox deploy: an account
+    on Lambda's default quota of 10 can't reserve any), log group retention 14 days;
   - env `USER_POOL_ID`, `USER_POOL_CLIENT_ID`, `ALLOWED_ORIGINS`, `COOKIE_MODE`,
     `ASSETS_DOMAIN_PARAM`, `PRIVATE_KEY_PARAM`, `KEY_PAIR_ID_PARAM`;
   - `ssm:GetParameter` plus `kms:Decrypt` scoped to the three parameters;
@@ -301,7 +302,8 @@ that every story needs
   - an OAC exists for S3 and for Lambda;
   - `/v/*` and `/a/*` have `TrustedKeyGroups`, and `/a/*` uses the CachingDisabled policy;
   - there's no `AWS::EC2::NatGateway`, `AWS::EC2::VPC`, or Lambda `VpcConfig`;
-  - the function URL `AuthType` is `AWS_IAM`, and reserved concurrency is 5;
+  - the function URL `AuthType` is `AWS_IAM`, and reserved concurrency is 5 in production and
+    absent in sandboxes;
   - in production, the budget exists with a $5 limit, and the distribution has the alias and a
     Route 53 record;
   - in sandbox mode, there's no budget, alias, or Route 53 record, and the session function's

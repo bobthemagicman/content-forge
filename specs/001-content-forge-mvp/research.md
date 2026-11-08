@@ -200,7 +200,10 @@ they're the first tasks of implementation.
     expiry. Personal environments use cross-site cookies instead (R19).
   - `GET /_session/signout` clears the cookies.
   - The function URL uses `AuthType AWS_IAM` behind **OAC**, so it can't be invoked directly.
-    Reserved concurrency is 5 to cap abuse cost.
+    Reserved concurrency is 5 to cap abuse cost, in production only: Lambda keeps 10 unreserved
+    executions per account, so an account on the default quota of 10 can't reserve any (seen on
+    the first sandbox deploy). Production's account needs a concurrency quota of at least 15
+    (quickstart §2).
 - **Rationale**:
   - Cookies for `assets.` have to be set by a response from `assets.`.
   - `content.` and `assets.` are **same-site** (same registrable domain), so `SameSite=Lax` cookies
@@ -474,6 +477,7 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
   | Demo host | The demo distribution's own `*.cloudfront.net` domain (R20) | The same, per sandbox |
   | Signing keys | `/content-forge/master/...`, `keys/master.public-key.pem` | `/content-forge/sandbox-<user>/...`, `keys/sandbox-<user>.public-key.pem` |
   | AWS Budget | Yes (one per account covers all environments) | No |
+  | Session function reserved concurrency | 5 | None (the account quota caps it) |
   | CSP headers | Yes (R18) | None (`next dev`) |
 
   - The Lambdas read the asset domain from SSM `/content-forge/<env>/assets/domain`, written by the

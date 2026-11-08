@@ -165,13 +165,13 @@ describe.each([
     }
   });
 
-  it("puts the session function behind an IAM-authenticated URL with reserved concurrency 5", () => {
+  it("puts the session function behind an IAM-authenticated URL, reserving concurrency only in production", () => {
     template.hasResourceProperties("AWS::Lambda::Url", { AuthType: "AWS_IAM" });
     template.hasResourceProperties("AWS::Lambda::Function", {
       Runtime: "nodejs24.x",
       MemorySize: 256,
       Timeout: 5,
-      ReservedConcurrentExecutions: 5,
+      ReservedConcurrentExecutions: props.isProduction ? 5 : Match.absent(),
     });
     template.hasResourceProperties("AWS::Lambda::Permission", {
       Action: "lambda:InvokeFunctionUrl",

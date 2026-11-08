@@ -198,8 +198,10 @@ export class AssetsCdn extends Construct {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 256,
       timeout: Duration.seconds(5),
-      // Caps what a flood of requests can cost (research R7).
-      reservedConcurrentExecutions: 5,
+      // Caps what a flood of requests can cost (research R7). Production only: Lambda keeps 10
+      // unreserved executions per account, so an account still on the 10-execution default quota
+      // (common for new accounts) can't reserve any. Sandboxes are capped by that quota anyway.
+      ...(production && { reservedConcurrentExecutions: 5 }),
       logGroup: sessionLogs,
       environment: {
         USER_POOL_ID: props.userPoolId,
