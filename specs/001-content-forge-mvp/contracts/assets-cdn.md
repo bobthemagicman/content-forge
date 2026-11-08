@@ -21,7 +21,9 @@ Two hosts:
 | anything else | — | — | — | `403` |
 
 - HTTPS only, with no HTTP redirect (`https-only`: a plain-HTTP request carrying a signed URL or
-  token would already have exposed it), TLS 1.2+, HTTP/2 and HTTP/3.
+  token would already have exposed it), HTTP/2 and HTTP/3. TLS 1.2+ in production, on the custom
+  domain. A sandbox's asset host and every demo host use CloudFront's default certificate, which
+  can't set a minimum, so they also accept TLS 1.0 and 1.1 (research R20).
 - Every response carries `Strict-Transport-Security: max-age=31536000` and
   `X-Content-Type-Options: nosniff`.
 - The default behavior is denied twice: a CloudFront Function answers `403`, and the trusted key

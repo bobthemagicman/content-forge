@@ -193,3 +193,28 @@ npm run ingest -- batch "<path-to-library>" --manifest library.csv --concurrency
 **Expected**: the run finishes unattended. At least 95% of items are `ok` with no overrides, and
 every failure appears in `ingest-report.json` with a reason. Fix failures with per-item overrides
 and rerun. Already-imported items are skipped.
+
+## 8. Offboarding a user
+
+Suspending someone in Google Workspace doesn't end their Content Forge session: Cognito keeps
+renewing it from its own 7-day refresh token (research R3). When someone leaves, also sign them out
+everywhere and disable them in the user pool, with the profile and pool ID for that environment
+(the pool ID is `auth.user_pool_id` in `amplify_outputs.json`):
+
+```bash
+PROFILE=<profile>
+POOL_ID=<user pool ID>
+USER=$(aws cognito-idp list-users --profile "$PROFILE" --region us-west-2 --user-pool-id "$POOL_ID" \
+  --filter 'email = "person@example.com"' --query 'Users[0].Username' --output text)
+echo "$USER"   # a GoogleWorkspace_<id> name; stop if it prints None
+
+aws cognito-idp admin-user-global-sign-out --profile "$PROFILE" --region us-west-2 \
+  --user-pool-id "$POOL_ID" --username "$USER"
+aws cognito-idp admin-disable-user --profile "$PROFILE" --region us-west-2 \
+  --user-pool-id "$POOL_ID" --username "$USER"
+```
+
+**Expected**: the refresh token stops working at once, so the app signs them out at its next
+refresh. An ID token they already hold verifies for up to an hour, and asset and demo cookies last
+up to 12 hours, so all access ends within about 13 hours. To let someone back in, run
+`admin-enable-user` with the same arguments.

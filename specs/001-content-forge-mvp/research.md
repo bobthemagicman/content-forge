@@ -116,6 +116,16 @@ they're the first tasks of implementation.
   sign-in access token and one from `GetTokensFromRefreshToken` both carry only `openid profile
   email`, and `UpdateUserAttributes` refuses both with `NotAuthorizedException` (quickstart V2). The
   docs don't say whether a refreshed token keeps the original scopes. This check shows it does.
+- **Residual risk** (accepted 2026-11-07, after the PR #134 re-review): leaving the Workspace
+  doesn't end access at once. Cognito renews a session from its own refresh token without asking
+  Google, and the session function checks `custom:hd` and email, which change only at a Google
+  sign-in. So a suspended account keeps working until its refresh token expires, up to 7 days, and
+  its asset and demo cookies last up to 12 hours more.
+  - Accepted because the catalog is internal and the users are one small team. A shorter refresh
+    token would mean more sign-ins for everyone, to cover an event the owner can handle directly.
+  - Offboarding (quickstart §8) signs the user out everywhere and disables them. That ends refresh
+    at once. An ID token already issued still verifies for up to an hour and can get new 12-hour
+    cookies, so access ends within about 13 hours.
 - **Alternatives considered**:
   - Auth.js: needs a server, so it's rejected for static export.
   - Cognito custom domain (`auth.example.com`): needs another us-east-1 cert. The Cognito prefix
@@ -575,6 +585,11 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
     template could break another template's demo, which costs nothing but a reopen.
   - Phishing is still possible on the demo host, but on a random `*.cloudfront.net` name that
     carries no company trust.
+  - The demo host has no TLS 1.2 floor (2026-11-07 re-review). CloudFront applies a minimum
+    protocol version only to a custom certificate, and the demo host always uses the default
+    `*.cloudfront.net` one, which still accepts TLS 1.0 and 1.1. The same holds for a sandbox's
+    asset host. It's HTTPS only with HSTS, and current browsers no longer offer TLS below 1.2, so a
+    downgrade needs an outdated client. Production's asset host is on the custom domain, at TLS 1.2.
 - **Alternatives considered**:
   - A separate registrable domain: the same isolation for about $15 a year, and a domain to keep.
   - Each demo in its own Amplify Hosting app on `*.amplifyapp.com` (also a public suffix, so
