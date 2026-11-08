@@ -41,6 +41,17 @@ cfnUserPool.adminCreateUserConfig = { allowAdminCreateUserOnly: true };
 cfnUserPoolClient.refreshTokenValidity = 7;
 cfnUserPoolClient.tokenValidityUnits = { refreshToken: "days" };
 
+// Google is the only way to get tokens from this client (research R3): no Cognito sign-in form,
+// and no SRP or custom-auth flows, only the authorization-code flow plus refresh. Tokens from
+// those other flows always carry `aws.cognito.signin.user.admin`, the scope that lets a user
+// rewrite their own attributes. `custom:hd` and `email` must stay writable by this client,
+// because Cognito rewrites mapped attributes on every Google sign-in, so the scope is the guard.
+// tests/infra/auth-client.test.ts checks all three settings.
+cfnUserPoolClient.supportedIdentityProviders = cfnUserPoolClient.supportedIdentityProviders?.filter(
+  (provider) => provider !== "COGNITO",
+);
+cfnUserPoolClient.explicitAuthFlows = ["ALLOW_REFRESH_TOKEN_AUTH"];
+
 // --- Asset plane (research R6–R8) -------------------------------------------------------------
 const publicKeyPath = fileURLToPath(new URL(`./custom/assets-cdn/keys/${envName}.public-key.pem`, import.meta.url));
 if (!existsSync(publicKeyPath)) {

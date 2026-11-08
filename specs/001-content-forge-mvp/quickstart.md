@@ -128,7 +128,7 @@ Run against `https://content.example.com` (or a sandbox URL) after step 4.
 | # | Scenario | Steps | Expected | Proves |
 |---|---|---|---|---|
 | V1 | Landing hides content | Open `/` in a private window | Branding + "Sign in with Google". No thumbnails or item data in DOM or network | US1-1, FR-003 |
-| V2 | Allowed sign-in | Sign in with an `@example.com` account, then look the user up in the Cognito console | Arrive at `/browse/`. Header shows name/avatar. The user has `custom:hd = example.com` | US1-2, FR-014, R3 |
+| V2 | Allowed sign-in | Sign in with an `@example.com` account, then look the user up in the Cognito console. Then run the attribute-write check below | Arrive at `/browse/`. Header shows name/avatar. The user has `custom:hd = example.com`. Neither access token has `aws.cognito.signin.user.admin`, and both writes are refused | US1-2, FR-014, R3 |
 | V3 | Personal account rejected | Sign in with a personal Gmail | Google's own "can only be used within its organization" page (the Internal consent screen stops it first). If it ever gets past Google: back on `/` with "authorized accounts only", and no user in the pool | US1-3, FR-001/002, SC-002 |
 | V4 | Direct access denied | Signed out: `curl -I https://assets.example.com/v/<id>/thumb-320.<hash>.webp`, replay an expired download URL, and POST a `listContentByTypeAndPublishedAt` query to the AppSync URL with no token | `403` for the assets, `401` from AppSync | US1-6, FR-005, SC-002 |
 | V5 | Rows | On `/browse/`, Tab into a row and use arrow keys and the next button | One row per non-empty type in the fixed order. Keyboard moves card to card | US2, FR-007–FR-011 |
@@ -141,6 +141,36 @@ Run against `https://content.example.com` (or a sandbox URL) after step 4.
 | V12 | Sign-out | Header → Sign out, then reload `/browse/` and an asset URL | Redirect to `/`. Asset returns `403` | FR-006 |
 | V13 | Performance | Lighthouse (desktop defaults) on `/browse/`. Play a video preview | LCP < 2.5 s. Video starts within 2 s | SC-004, US6-2 |
 | V14 | Cost guard | AWS Budgets console | `content-forge-monthly` budget at $5 with an alert | SC-008 |
+
+### Attribute-write check (V2)
+
+A signed-in user must not be able to rewrite their own `custom:hd` (research R3). In the signed-in
+app tab's devtools, find Amplify's `localStorage` keys ending in `.accessToken` and
+`.refreshToken`. Then, in a terminal, with the region and client ID from `amplify_outputs.json`:
+
+```bash
+ACCESS=<accessToken value>
+REFRESH=<refreshToken value>
+CLIENT_ID=<auth.user_pool_client_id>
+
+scopes() { node -e 'console.log(JSON.parse(Buffer.from(process.argv[1].split(".")[1], "base64url")).scope)' "$1"; }
+
+# 1. The sign-in token: the scopes must not include aws.cognito.signin.user.admin.
+scopes "$ACCESS"
+aws cognito-idp update-user-attributes --region us-west-2 --access-token "$ACCESS" \
+  --user-attributes Name=custom:hd,Value=attacker.test   # expect NotAuthorizedException
+
+# 2. A refreshed token, the way Amplify refreshes.
+REFRESHED=$(aws cognito-idp get-tokens-from-refresh-token --region us-west-2 --client-id "$CLIENT_ID" \
+  --refresh-token "$REFRESH" --query AuthenticationResult.AccessToken --output text)
+scopes "$REFRESHED"
+aws cognito-idp update-user-attributes --region us-west-2 --access-token "$REFRESHED" \
+  --user-attributes Name=custom:hd,Value=attacker.test   # expect NotAuthorizedException
+```
+
+These tokens act as you. Run the commands in your own terminal, don't paste the tokens anywhere
+else, and sign out afterwards. If either write succeeds, `custom:hd` is no longer a server-side
+check: stop and fix it before deploying `master`. Signing in again restores your real `custom:hd`.
 
 ## 7. Full library import (SC-003)
 

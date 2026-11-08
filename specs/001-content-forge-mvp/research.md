@@ -73,7 +73,13 @@ they're the first tasks of implementation.
     so it also covers sign-ins after the first: Cognito rewrites mapped attributes each time.
   - The Google OAuth consent screen is set to **Internal** (defense in depth).
   - Self-service sign-up is turned off (`allowAdminCreateUserOnly: true` through a CDK override), and
-    the UI only calls `signInWithRedirect({ provider: 'Google' })`.
+    the UI only calls `signInWithRedirect({ provider: { custom: 'GoogleWorkspace' } })`.
+  - The app client gives out tokens only through Google (CDK overrides, checked by
+    `tests/infra/auth-client.test.ts`):
+    - the only identity provider is `GoogleWorkspace`, not `COGNITO`, so there's no Cognito sign-in
+      form;
+    - the only explicit auth flow is `ALLOW_REFRESH_TOKEN_AUTH`, so no SRP or custom auth;
+    - OAuth allows only the code flow and the scopes `openid email profile`.
   - Tokens use Amplify's default storage (app-origin `localStorage`). The refresh-token lifetime is
     7 days.
 - **Rationale**:
@@ -90,6 +96,13 @@ they're the first tasks of implementation.
     as a further layer.
   - A trigger error makes Cognito redirect to the callback with `error_description`, which the
     callback page maps to the "authorized accounts only" message.
+  - **Users can't rewrite their own `custom:hd` or email** (2026-11-07 review). Cognito lets a user
+    change their own attributes with `UpdateUserAttributes`, and requires the app client to have
+    write access to every mapped attribute, or federated sign-in fails. So `custom:hd` and `email`
+    stay writable. The guard is the scope instead: `UpdateUserAttributes` needs an access token with
+    `aws.cognito.signin.user.admin`. SRP and custom-auth tokens always carry it, and the OAuth
+    flow carries it only if requested. The client allows neither, and federated users have no
+    password. Each Google sign-in also rewrites both attributes from Google's token.
 - **Verify in spike**: that a Workspace account's first sign-in maps `custom:hd` (check the user's
   attributes in the user pool), and that a personal Gmail account is refused. Also that
   `allowAdminCreateUserOnly` doesn't block first-time federated
@@ -99,6 +112,9 @@ they're the first tasks of implementation.
   created the user with `custom:hd` set to the Workspace domain, through the pre-sign-up trigger's
   stricter checks. So the OIDC mapping of `hd` works, and `allowAdminCreateUserOnly: true` doesn't
   block first-time federated sign-in. Still to confirm on `master` (T054).
+- **Still to verify on a sandbox**: that an access token, both from sign-in and after a refresh,
+  has no `aws.cognito.signin.user.admin` and can't call `UpdateUserAttributes` (quickstart V2). The
+  docs don't say whether a refreshed token keeps the original scopes.
 - **Alternatives considered**:
   - Auth.js: needs a server, so it's rejected for static export.
   - Cognito custom domain (`auth.example.com`): needs another us-east-1 cert. The Cognito prefix
@@ -542,10 +558,18 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
   - No new secret, Lambda, or endpoint on the demo host: the same key group verifies both hosts,
     and every policy names its host, so a preview cookie can't open a demo or the reverse.
   - Cost: $0. Both distributions and both functions share CloudFront's always-free allowance (R17).
-- **Residual risks**:
-  - A launch link is a bearer credential for that one demo until it expires. It lives only in the
-    app's memory and the new tab's first request, and the redirect keeps it out of history and
-    referrers.
+- **Residual risks** (accepted 2026-11-07, after the PR #134 review):
+  - A launch link is a bearer credential for that one demo for 12 hours. Anyone who copies it, for
+    example from browser history or a shared screen, can open that demo without signing in until it
+    expires. It lives only in the app's memory and the new tab's first request, and the redirect
+    keeps it out of referrers, but the browser may still record it in history.
+  - Signing out doesn't end demo access. The demo cookies are on another site, so the app can't
+    clear them, and they last until they expire.
+  - Accepted because a link only opens one third-party template, not catalog data or downloads, and
+    only a signed-in domain user can get one. A link shorter-lived than its cookies would need its
+    own signature, checked in the CloudFront Function with a key in CloudFront KeyValueStore. That's
+    machinery for a small gain. Shortening both to well under 12 hours would break open demos
+    mid-session (FR-029).
   - Templates share the demo origin's storage (`localStorage`, cookies they set themselves). A
     template could break another template's demo, which costs nothing but a reopen.
   - Phishing is still possible on the demo host, but on a random `*.cloudfront.net` name that
