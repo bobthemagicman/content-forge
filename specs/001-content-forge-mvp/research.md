@@ -95,6 +95,10 @@ they're the first tasks of implementation.
   `allowAdminCreateUserOnly` doesn't block first-time federated
   sign-in. If it does, leave self-sign-up on. The pre-sign-up trigger still enforces the domain, and
   no password UI is exposed.
+- **Spike outcome (2026-11-07, personal sandbox)**: a Workspace account's first Google sign-in
+  created the user with `custom:hd` set to the Workspace domain, through the pre-sign-up trigger's
+  stricter checks. So the OIDC mapping of `hd` works, and `allowAdminCreateUserOnly: true` doesn't
+  block first-time federated sign-in. Still to confirm on `master` (T054).
 - **Alternatives considered**:
   - Auth.js: needs a server, so it's rejected for static export.
   - Cognito custom domain (`auth.example.com`): needs another us-east-1 cert. The Cognito prefix
