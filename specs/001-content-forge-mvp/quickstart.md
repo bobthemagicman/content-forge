@@ -22,6 +22,12 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 
 ## 2. One-time bootstrap (documented exceptions to "everything as code")
 
+0. **Lambda concurrency quota**: production reserves 5 concurrent executions for the session
+   function, and Lambda keeps 10 unreserved, so the account needs a quota of at least 15. New
+   accounts often start at 10. Check **Service Quotas → AWS Lambda → Concurrent executions** in
+   `us-west-2`, and request 1000 (the usual default) if it's lower. Increases are free and usually
+   approved within a day.
+
 1. **Edge certificate**: `cd infra/edge-cert && npm ci && npx cdk deploy -c assetsDomain=assets.<domain>
    -c hostedZoneId=<zone id> --profile <p>`. Note the output `AssetsCertArn`.
 2. **Signing keys**: `scripts/bootstrap/create-signing-keys.sh --env master --profile <p>`.
