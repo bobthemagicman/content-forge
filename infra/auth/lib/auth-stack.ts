@@ -25,7 +25,7 @@ export interface AuthStackProps extends StackProps {
 /**
  * The user pool for one auth environment, in the auth account (research R21). Everything the app's
  * own account needs from it is in the outputs, which scripts/auth/deploy.sh copies to
- * `amplify/auth-environments/<env>.json`.
+ * the SSM parameter `/content-forge/auth/<env>` in the app account.
  *
  * Google Workspace is the only way in (research R3):
  * - Google is a generic OIDC provider, not Cognito's built-in Google provider. Only OIDC providers

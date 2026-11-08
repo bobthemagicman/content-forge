@@ -34,8 +34,9 @@ Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the au
    -c hostedZoneId=<zone id> --profile <p>`. Note the output `AssetsCertArn`.
 2. **Signing keys**: `scripts/bootstrap/create-signing-keys.sh --env master --profile <p>`.
    - It writes the private key to SSM `/content-forge/master/cloudfront/private-key` (SecureString).
-   - It writes the public key to `amplify/custom/assets-cdn/keys/master.public-key.pem`. Commit that
-     file. Public keys aren't secret.
+   - It writes the public key to SSM `/content-forge/master/cloudfront/public-key`, where synth
+     reads it. Nothing is committed: deployment settings stay out of this repo (research R22,
+     [`docs/deployment/settings.md`](../../docs/deployment/settings.md)).
 3. **Google OAuth client and user pools** (research R3, R21):
    1. In Google Cloud, create a Web application client with the consent screen set to Internal.
       Cognito registers it as the OIDC provider `GoogleWorkspace`, which needs nothing extra on
@@ -45,17 +46,19 @@ Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the au
    3. Deploy the pools to the auth account:
 
       ```bash
-      ALLOWED_EMAIL_DOMAIN=<domain> scripts/auth/deploy.sh --env dev --profile <auth p>
-      ALLOWED_EMAIL_DOMAIN=<domain> APP_ORIGIN=https://content.<domain> scripts/auth/deploy.sh --env prod --profile <auth p>
+      ALLOWED_EMAIL_DOMAIN=<domain> scripts/auth/deploy.sh --env dev --auth-profile <auth p> --app-profile <app p>
+      ALLOWED_EMAIL_DOMAIN=<domain> APP_ORIGIN=https://content.<domain> scripts/auth/deploy.sh --env prod --auth-profile <auth p> --app-profile <app p>
       ```
 
-      Each writes `amplify/auth-environments/<env>.json`. Commit both: they hold the pool IDs and
-      domain, which aren't secret.
+      Each writes the pool's IDs, domain and redirect origin to the app account's SSM
+      (`/content-forge/auth/<env>`), where synth reads them. Nothing is committed. Both default to
+      `us-west-2`; pass `--region` for the auth account and `--app-region` for the app account.
    4. Add each pool's redirect URI, which the deploy prints
       (`https://<cognito-domain>/oauth2/idpresponse`), to the Google client's authorized redirect
       URIs.
 
    Rerun step 3 when the pool settings change, or the Google secret (then redeploy both pools).
+   Then redeploy the app (or restart sandboxes) if the handover changed.
 4. **Amplify app** (app account): connect the GitHub repo `bobthemagicman/content-forge` in
    `us-west-2`. Set:
    - env vars `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget
@@ -66,6 +69,9 @@ Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the au
      (`amplify/config.ts`), so a deploy without them only admits `@example.com`;
    - env `NEXT_PUBLIC_DEMO_MODE=0`, so the front end uses Cognito instead of the beta preview's
      simulated sign-in;
+   - on the Amplify service role, `ssm:GetParameter` on
+     `arn:aws:ssm:<region>:<app account>:parameter/content-forge/*`. Synth reads the pool handover
+     and the signing public key from there (research R22);
    - the custom domain `content.example.com` → branch `master`.
 
    Then apply the response headers (CSP, HSTS, ...) and the 404 rewrite, which name the asset host
@@ -91,7 +97,8 @@ NEXT_PUBLIC_DEMO_MODE=0 npm run dev                                # http://loca
 ```
 
 Sandboxes deploy to the app account and sign in through the shared `dev` pool in the auth account
-(research R21), whose `amplify/auth-environments/dev.json` is committed. Nothing else to set up.
+(research R21). Synth reads that pool's settings from the app account's SSM, where step 3 of §2 put
+them, so nothing else needs setting up.
 
 Plain `npm run dev` runs the beta preview: simulated sign-in on the demo catalog. Without a sandbox,
 `predev`/`prebuild` copy the E2E fixture to `amplify_outputs.json` so the build still works;
@@ -101,8 +108,7 @@ The sandbox's environment name is `sandbox-<OS username>`. If your username has 
 than letters, digits, `.`, `_` and `-`, synth stops with an error: pick a name and set it for both
 commands, `--env sandbox-<name>` and `AWS_BRANCH=sandbox-<name> npx ampx sandbox ...`.
 
-Sandboxes use their own bucket, table, and signing keys, and share the `dev` user pool. Commit the
-sandbox's `keys/sandbox-<user>.public-key.pem`.
+Sandboxes use their own bucket, table, and signing keys, and share the `dev` user pool.
 
 Sandbox assets are served from the distribution's `*.cloudfront.net` domain with cross-site cookies,
 and there's no budget or custom domain (research R19). **Use Chrome for local development.**
@@ -217,7 +223,9 @@ and rerun. Already-imported items are skipped.
 Suspending someone in Google Workspace doesn't end their Content Forge session: Cognito keeps
 renewing it from its own 7-day refresh token (research R3). When someone leaves, also sign them out
 everywhere and disable them in the user pool. Use the auth account's profile and the pool ID for
-that environment (`userPoolId` in `amplify/auth-environments/<dev|prod>.json`):
+that environment. Read it from the app account's handover, with the app account's profile:
+`aws ssm get-parameter --name /content-forge/auth/<dev|prod> --query Parameter.Value --output text`
+prints the pool settings, including `userPoolId`.
 
 ```bash
 PROFILE=<profile>

@@ -155,6 +155,7 @@ that every story needs
      (research R8).
   - **Done:** `--region` defaults to `us-west-2`. `--rotate` passes `--overwrite`; without it the script exits if the parameter exists. Checked against a stubbed `aws`: first run, existing key, rotate, and a failed SSM write (exits non-zero and writes no public key). The temporary directory is removed in every case.
   - **Security review:** the script refuses to run while AWS CLI history is enabled for the profile, because history records request parameters, including the private key, in plain text.
+  - **Changed 2026-11-08 (T130, research R22):** step 3 now writes the public key to SSM String `/content-forge/<env>/cloudfront/public-key` instead of the repo, so no deployment's key is committed.
 - [x] T013 [P] Create `src/lib/content-types.ts`. It exports the `CONTENT_TYPES` ordered array:
   `WEBSITE_TEMPLATE`, `POWERPOINT_TEMPLATE`, `VIDEO`, `IMAGE`, `TEXTURE`, `OTHER`. Each entry has:
   - `label` (e.g., "Website Templates");
@@ -324,7 +325,9 @@ that every story needs
     rejects names the key script can't bootstrap (`tests/unit/environment.test.ts` keeps the two
     patterns in step);
   - read `amplify/custom/assets-cdn/keys/<envName>.public-key.pem`. If it's missing, throw an error
-    telling the developer to run `scripts/bootstrap/create-signing-keys.sh --env <envName>`;
+    telling the developer to run `scripts/bootstrap/create-signing-keys.sh --env <envName>`.
+    **Changed 2026-11-08 (T130, research R22):** it reads SSM
+    `/content-forge/<envName>/cloudfront/public-key` at synth instead;
   - `backend.createStack('assets')` with `new AssetsCdn(...)`, fed from `backend.auth.resources`,
     the key file, `allowedOrigins` (`https://content.example.com` in production,
     `http://localhost:3000` otherwise), and in production `assetsDomain: 'assets.example.com'`,
@@ -353,13 +356,14 @@ that every story needs
   - **Done, with one change:** the response headers and the 404 rewrite aren't in `amplify.yml`. Amplify has deprecated `customHeaders` there, and the CSP must name the real asset host, which stays out of this public repo. `scripts/hosting/apply-settings.sh` builds the R18 headers from `ASSETS_DOMAIN` (`scripts/hosting/custom-headers.mjs`, unit-tested against R18) and applies them with `aws amplify update-app`, like the beta deploy. The cache holds `.npm/` rather than `node_modules/`, which `npm ci` replaces anyway.
 - [ ] T027 (owner) Run the one-time bootstrap from [quickstart.md](./quickstart.md#2-one-time-bootstrap-documented-exceptions-to-everything-as-code):
   1. deploy `infra/edge-cert`;
-  2. run `scripts/bootstrap/create-signing-keys.sh --env master` and commit
-     `keys/master.public-key.pem`;
+  2. run `scripts/bootstrap/create-signing-keys.sh --env master`, which puts both keys in SSM;
   3. create the Internal Google OAuth client, store it with `scripts/auth/set-google-secret.sh`, and
-     deploy the `prod` user pool to the auth account with `scripts/auth/deploy.sh --env prod`
-     (research R21);
+     deploy the `prod` user pool to the auth account with `scripts/auth/deploy.sh --env prod
+     --auth-profile <p> --app-profile <p>`, which hands it to the app account's SSM (research R21,
+     R22);
   4. connect the Amplify app in `us-west-2` in the app account, set env `ASSETS_CERT_ARN`,
-     `HOSTED_ZONE_ID`, `BUDGET_ALERT_EMAIL`, and map `content.example.com`.
+     `HOSTED_ZONE_ID`, `BUDGET_ALERT_EMAIL`, give its service role `ssm:GetParameter` on
+     `/content-forge/*`, and map `content.example.com`.
 
   Then deploy the skeleton and **verify R2**: does platform `WEB` with `out/` serve correctly, or
   is the "Web" framework override needed? Record the outcome in
@@ -1114,14 +1118,19 @@ download increases the item's displayed count by one.
   - `infra/auth`, a standalone CDK app with a `dev` pool (localhost, every sandbox) and a `prod`
     pool, each with the Google OIDC provider, the refresh-only app client, the domain and the
     pre-sign-up trigger, which moves from `amplify/auth/` unchanged;
-  - `scripts/auth/set-google-secret.sh` and `scripts/auth/deploy.sh`, which writes the committed
-    handover file `amplify/auth-environments/<env>.json`;
-  - the app's backend drops `defineAuth`, AppSync switches to OIDC mode with the pool as issuer,
-    the session function verifies against the handover file's pool, and `backend.addOutput` writes
-    the `auth` section of `amplify_outputs.json`;
+  - `scripts/auth/set-google-secret.sh` and `scripts/auth/deploy.sh`, which hands the pool's
+    settings to the app account as the SSM String `/content-forge/auth/<env>` (research R22: no
+    deployment's settings in the repo);
+  - the app's backend drops `defineAuth` and reads the handover at synth (`amplify/parameters.ts`);
+    AppSync switches to OIDC mode with the pool as issuer, the session function verifies against
+    the handover's pool, and `backend.addOutput` writes the `auth` section of
+    `amplify_outputs.json`;
+  - the CloudFront public keys move to SSM too (T012, T025), and the committed sandbox key is
+    deleted;
   - tests: `tests/infra/auth-stack.test.ts` takes over the app client checks;
     `tests/infra/backend-auth.test.ts` checks the backend has no Cognito resources and trusts the
-    handover file's pool; `tests/unit/auth-environment.test.ts` covers the file's checks;
+    handover's pool; `tests/unit/auth-environment.test.ts` and `tests/unit/parameters.test.ts`
+    cover the handover's checks and the SSM reads;
   - **verify on a sandbox** in the app account: Google sign-in through the `dev` pool, catalog
     queries through AppSync's OIDC mode (including after a token refresh), `/_session`, and
     quickstart V2 and V3.

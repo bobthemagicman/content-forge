@@ -1,20 +1,24 @@
 import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // The app's backend has no user pool of its own: it trusts the one in the auth account (research
-// R21) through the handover file. This synthesizes the real backend against a stand-in file and
-// checks that every consumer of the pool points at it.
+// R21) through the handover parameter. This synthesizes the real backend against stand-in
+// parameters (CONTENT_FORGE_PARAMETERS_DIR, in place of SSM) and checks that every consumer of the
+// pool points at it.
 
 const root = join(import.meta.dirname, "..", "..");
 const ENV = "sandbox-vitest-auth";
-// Ignored by .gitignore, in case a killed run leaves it behind.
-const keyFile = join(root, "amplify", "custom", "assets-cdn", "keys", `${ENV}.public-key.pem`);
 const outDir = mkdtempSync(join(tmpdir(), "content-forge-backend-synth-"));
-const authFile = join(outDir, "auth-dev.json");
+
+/** Writes one stand-in parameter under `dir`, the way SSM names it. */
+function putParameter(dir: string, name: string, value: string) {
+  mkdirSync(dirname(join(dir, name)), { recursive: true });
+  writeFileSync(join(dir, name), value);
+}
 
 const POOL = {
   region: "us-west-2",
@@ -47,7 +51,7 @@ function synth(env: Record<string, string>) {
       env: {
         ...process.env,
         AWS_BRANCH: ENV,
-        CONTENT_FORGE_AUTH_FILE: authFile,
+        CONTENT_FORGE_PARAMETERS_DIR: join(outDir, "parameters"),
         CDK_CONTEXT_JSON: JSON.stringify({
           "amplify-backend-namespace": "cf",
           "amplify-backend-name": "vitest",
@@ -65,14 +69,12 @@ beforeAll(() => {
     publicKeyEncoding: { type: "spki", format: "pem" },
     privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });
-  writeFileSync(keyFile, publicKey);
-  writeFileSync(authFile, JSON.stringify(POOL));
-  try {
-    const run = synth({ CDK_OUTDIR: join(outDir, "cdk.out") });
-    if (run.status !== 0) throw new Error(`Backend synth failed:\n${run.stderr}`);
-  } finally {
-    rmSync(keyFile, { force: true });
+  for (const dir of ["parameters", "parameters-wrong-origin"]) {
+    putParameter(join(outDir, dir), `/content-forge/${ENV}/cloudfront/public-key`, publicKey);
   }
+  putParameter(join(outDir, "parameters"), "/content-forge/auth/dev", JSON.stringify(POOL));
+  const run = synth({ CDK_OUTDIR: join(outDir, "cdk.out") });
+  if (run.status !== 0) throw new Error(`Backend synth failed:\n${run.stderr}`);
 
   const dir = join(outDir, "cdk.out");
   templates = Object.fromEntries(
@@ -123,10 +125,18 @@ describe("backend auth (research R21)", () => {
   });
 
   it("refuses a pool whose redirect origin doesn't match the deployment", () => {
-    const wrongOrigin = join(outDir, "auth-wrong-origin.json");
-    writeFileSync(wrongOrigin, JSON.stringify({ ...POOL, appOrigin: "https://content.example.com" }));
-    const run = synth({ CONTENT_FORGE_AUTH_FILE: wrongOrigin, CDK_OUTDIR: join(outDir, "cdk.out.wrong") });
+    const parameters = join(outDir, "parameters-wrong-origin");
+    putParameter(parameters, "/content-forge/auth/dev", JSON.stringify({ ...POOL, appOrigin: "https://content.example.com" }));
+    const run = synth({ CONTENT_FORGE_PARAMETERS_DIR: parameters, CDK_OUTDIR: join(outDir, "cdk.out.wrong") });
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain("redirects to https://content.example.com");
+  }, 60_000);
+
+  it("stops with the bootstrap command when this deployment has no signing key", () => {
+    const parameters = join(outDir, "parameters-no-key");
+    putParameter(parameters, "/content-forge/auth/dev", JSON.stringify(POOL));
+    const run = synth({ CONTENT_FORGE_PARAMETERS_DIR: parameters, CDK_OUTDIR: join(outDir, "cdk.out.no-key") });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain(`create-signing-keys.sh --env ${ENV}`);
   }, 60_000);
 });

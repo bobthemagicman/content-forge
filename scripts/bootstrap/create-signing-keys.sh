@@ -5,10 +5,11 @@
 #
 # - The private key goes to SSM SecureString /content-forge/<env>/cloudfront/private-key. It's
 #   written only to a temporary directory outside the repo, which is deleted on exit.
-# - The public key goes to amplify/custom/assets-cdn/keys/<env>.public-key.pem. Commit it: public
-#   keys aren't secret, and amplify/backend.ts reads it at synth.
-# - An existing key is never replaced unless --rotate is given. After rotating, commit the new public
-#   key and deploy straight away: until then the stack's key group won't accept the new signatures.
+# - The public key goes to SSM String /content-forge/<env>/cloudfront/public-key, which
+#   amplify/backend.ts reads at synth. It isn't secret, but it belongs to one deployment, so it stays
+#   out of the repo (docs/deployment/settings.md).
+# - An existing key is never replaced unless --rotate is given. After rotating, deploy straight away:
+#   until then the stack's key group won't accept the new signatures.
 set -euo pipefail
 
 usage() {
@@ -43,7 +44,7 @@ done
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PARAM="/content-forge/${ENV_NAME}/cloudfront/private-key"
-PUBLIC_KEY="${ROOT}/amplify/custom/assets-cdn/keys/${ENV_NAME}.public-key.pem"
+PUBLIC_PARAM="/content-forge/${ENV_NAME}/cloudfront/public-key"
 aws_() { aws --profile "$PROFILE" --region "$REGION" "$@"; }
 
 # AWS CLI history records request parameters in plain text (~/.aws/cli/history), which would
@@ -78,7 +79,7 @@ echo "Writing the private key to SSM $PARAM ($REGION)..."
 aws_ ssm put-parameter --name "$PARAM" --type SecureString --value "file://$WORK/private.pem" \
   --description "Content Forge ${ENV_NAME} CloudFront signing key" "$OVERWRITE" >/dev/null
 
-mkdir -p "$(dirname "$PUBLIC_KEY")"
-cp "$WORK/public.pem" "$PUBLIC_KEY"
-chmod 644 "$PUBLIC_KEY"
-echo "Wrote ${PUBLIC_KEY#"$ROOT"/}. Commit it, then deploy."
+echo "Writing the public key to SSM $PUBLIC_PARAM..."
+aws_ ssm put-parameter --name "$PUBLIC_PARAM" --type String --value "file://$WORK/public.pem" \
+  --description "Content Forge ${ENV_NAME} CloudFront public key" --overwrite >/dev/null
+echo "Done. Deploy ${ENV_NAME} next."

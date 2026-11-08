@@ -256,10 +256,12 @@ they're the first tasks of implementation.
     `sandbox-<username>`) with `scripts/bootstrap/create-signing-keys.sh --env <env>`.
     - The **private key** goes to SSM Parameter Store SecureString
       `/content-forge/<env>/cloudfront/private-key`.
-    - The **public key** PEM is committed at
-      `amplify/custom/assets-cdn/keys/<env>.public-key.pem`. `backend.ts` reads the file for the
-      current environment and passes it to `AssetsCdn`, which feeds it to `cloudfront.PublicKey` →
-      `KeyGroup`. Synth fails with a pointer to the bootstrap script if the file is missing.
+    - The **public key** PEM goes to SSM String `/content-forge/<env>/cloudfront/public-key`.
+      `backend.ts` reads it at synth for the current environment and passes it to `AssetsCdn`,
+      which feeds it to `cloudfront.PublicKey` → `KeyGroup`. Synth fails with a pointer to the
+      bootstrap script if it's missing. It isn't secret, but it belongs to one deployment, so it
+      stays out of this public repo (R22). Until 2026-11-08 it was committed under
+      `amplify/custom/assets-cdn/keys/`.
   - The key-pair ID is written to SSM `/content-forge/<env>/cloudfront/key-pair-id` by the stack.
   - Separate keys mean a sandbox Lambda can never sign cookies or URLs that production accepts.
   - Both Lambdas read SSM at cold start and cache the values.
@@ -508,7 +510,7 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
   | Asset cookies | Host-only, `Path=/v/; SameSite=Lax` (same-site) | Host-only, `Path=/v/; SameSite=None; Secure; HttpOnly` (cross-site) |
   | `/_session` allowed origin | `https://content.example.com` | `http://localhost:3000` |
   | Demo host | The demo distribution's own `*.cloudfront.net` domain (R20) | The same, per sandbox |
-  | Signing keys | `/content-forge/master/...`, `keys/master.public-key.pem` | `/content-forge/sandbox-<user>/...`, `keys/sandbox-<user>.public-key.pem` |
+  | Signing keys | SSM `/content-forge/master/cloudfront/...` | SSM `/content-forge/sandbox-<user>/cloudfront/...` |
   | AWS Budget | Yes (one per account covers all environments) | No |
   | Session function reserved concurrency | 5 | None (the account quota caps it) |
   | CSP headers | Yes (R18) | None (`next dev`) |
@@ -619,9 +621,9 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
     - `prod` redirects only to the app origin and serves `master`. Its pool is retained and
       deletion-protected, because replacing it would delete every user.
   - **Handover.** `scripts/auth/deploy.sh` deploys a pool and writes its region, IDs, domain and
-    redirect origin to `amplify/auth-environments/<dev|prod>.json`, which is committed. The app's
-    backend reads it at synth (`amplify/auth-environment.ts`). Synth stops if the file is missing
-    or malformed, or if its origin isn't the one this deployment serves.
+    redirect origin, as JSON, to the SSM String `/content-forge/auth/<dev|prod>` in the app account
+    (R22). The app's backend reads it at synth (`amplify/auth-environment.ts`). Synth stops if it's
+    missing or malformed, or if its origin isn't the one this deployment serves.
   - **AppSync** uses OIDC mode with the pool as issuer. Amplify's client sends the Cognito access
     token in that mode, as it does in user-pool mode.
     - There's no client ID check. Each pool has exactly one app client, and the stack test keeps
@@ -629,8 +631,7 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
     - Tokens are refused more than an hour after issue, or more than 7 days and an hour after the
       sign-in they come from. That's the access-token and refresh-token lifetimes again, as a
       second check.
-  - **The session function** verifies ID tokens against the pool and client from the handover
-    file. `aws-jwt-verify` only needs the pool's public keys, so it works across accounts.
+  - **The session function** verifies ID tokens against the pool and client from the handover. `aws-jwt-verify` only needs the pool's public keys, so it works across accounts.
   - **`amplify_outputs.json`** gets the same `auth` section Amplify writes for its own pool, through
     `backend.addOutput`, so the front end is unchanged.
   - **The Google client ID and secret** are in Secrets Manager in the auth account
@@ -652,7 +653,7 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
     origin, and a pool per developer would need a deploy in the auth account for each.
 - **Consequences**:
   - Two deploys with two AWS profiles. A pool change means deploying `infra/auth`, then the app if
-    the handover file changed.
+    the handover changed.
   - Sandboxes share the `dev` pool's users.
   - Offboarding (quickstart §8) runs against the auth account.
 - **Still to verify on a sandbox**:
@@ -669,3 +670,33 @@ storage", SC-008). *Verify figures against current AWS pricing before launch.*
   - A Cognito identity pool in the app account federating the auth account's user pool: that's for
     AWS credentials, which the app never uses.
 
+## R22. Deployment settings stay out of the repo
+
+- **Decision** (2026-11-08):
+  - This repo is public and meant to be reusable, so it holds code, scripts and placeholders only.
+    Anything that identifies one deployment stays in that deployment's own accounts:
+    - the pool handover, SSM `/content-forge/auth/<dev|prod>` in the app account (R21);
+    - each environment's CloudFront public key, SSM `/content-forge/<env>/cloudfront/public-key`
+      (R8);
+    - domains, the allowed email domain, the certificate and zone IDs, and the budget email, as
+      Amplify environment variables (quickstart §2), with `example.com` placeholders in the code;
+    - account IDs and AWS profile names, which no file names: every script takes `--profile`.
+  - Synth reads the SSM values with the deploying credentials (`amplify/parameters.ts`). The
+    synthesized templates hold them, but templates stay in `cdk.out` (ignored) and the deploying
+    account. Tests point `CONTENT_FORGE_PARAMETERS_DIR` at a directory of stand-in values instead.
+  - `docs/deployment/settings.md` lists every setting a deployment provides, and where it lives.
+- **Rationale**:
+  - None of these values are secret: the front end's bundle ships the pool IDs and domain. But
+    committed, they'd tie the repo to one deployment, and anyone reusing it would inherit them.
+  - Read at synth, not resolved by CloudFormation at deploy: synth can still check that the pool
+    redirects to the origin this deployment serves, and Amplify's outputs (`amplify_outputs.json`)
+    get plain values.
+- **Rejected**:
+  - A private deployment repo: another place to keep in step, for values that already live in the
+    accounts that use them. It's still an option for versioning the settings, as long as it only
+    feeds SSM and the Amplify app.
+  - Environment variables for the handover: every sandbox run would need them set by hand.
+- **Consequences**:
+  - Synth needs AWS credentials for the app account, which `ampx sandbox` and Amplify Hosting
+    already have. The Amplify service role needs `ssm:GetParameter` on `/content-forge/*`
+    (quickstart §2).

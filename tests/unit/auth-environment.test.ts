@@ -1,13 +1,17 @@
 // @vitest-environment node
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { authEnvFor, loadAuthEnvironment } from "../../amplify/auth-environment";
+import { dirname, join } from "node:path";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { authEnvFor, loadAuthEnvironment, parseAuthEnvironment } from "../../amplify/auth-environment";
 
 const dir = mkdtempSync(join(tmpdir(), "content-forge-auth-env-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
-afterEach(() => vi.unstubAllEnvs());
+beforeEach(() => {
+  vi.unstubAllEnvs();
+  rmSync(join(dir, "content-forge"), { recursive: true, force: true });
+  vi.stubEnv("CONTENT_FORGE_PARAMETERS_DIR", dir);
+});
 
 const POOL = {
   region: "us-west-2",
@@ -16,11 +20,12 @@ const POOL = {
   domain: "content-forge-dev-0123456789.auth.us-west-2.amazoncognito.com",
   appOrigin: "http://localhost:3000",
 };
+const ISSUER = "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_AbC123xyz";
 
-function useFile(contents: unknown) {
-  const path = join(dir, `${Math.random().toString(36).slice(2)}.json`);
-  writeFileSync(path, JSON.stringify(contents));
-  vi.stubEnv("CONTENT_FORGE_AUTH_FILE", path);
+function useParameter(authEnv: "dev" | "prod", contents: string) {
+  const path = join(dir, "content-forge", "auth", authEnv);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, contents);
 }
 
 describe("auth environment handover (research R21)", () => {
@@ -29,17 +34,25 @@ describe("auth environment handover (research R21)", () => {
     expect(authEnvFor("sandbox-someone")).toBe("dev");
   });
 
-  it("reads the pool and derives its token issuer", () => {
-    useFile(POOL);
-    expect(loadAuthEnvironment("dev")).toEqual({
-      ...POOL,
-      issuerUrl: "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_AbC123xyz",
-    });
+  it("reads the pool from /content-forge/auth/<env> and derives its token issuer", async () => {
+    useParameter("dev", JSON.stringify(POOL));
+    await expect(loadAuthEnvironment("dev")).resolves.toEqual({ ...POOL, issuerUrl: ISSUER });
   });
 
-  it("says how to create a missing file", () => {
-    vi.stubEnv("CONTENT_FORGE_AUTH_FILE", join(dir, "missing.json"));
-    expect(() => loadAuthEnvironment("prod")).toThrow(/scripts\/auth\/deploy\.sh --env prod/);
+  it("drops fields it doesn't know", () => {
+    expect(parseAuthEnvironment(JSON.stringify({ ...POOL, extra: "x" }), "test")).not.toHaveProperty("extra");
+  });
+
+  it("says how to create a missing parameter", async () => {
+    await expect(loadAuthEnvironment("prod")).rejects.toThrow(
+      /\/content-forge\/auth\/prod doesn't exist.*scripts\/auth\/deploy\.sh --env prod/,
+    );
+  });
+
+  it("refuses a parameter that isn't JSON", () => {
+    expect(() => parseAuthEnvironment("us-west-2_AbC123xyz", "/content-forge/auth/dev")).toThrow(
+      "/content-forge/auth/dev: not valid JSON.",
+    );
   });
 
   it.each([
@@ -49,12 +62,14 @@ describe("auth environment handover (research R21)", () => {
     ["appOrigin", "http://localhost:3000/path"],
     ["region", undefined],
   ])("refuses a malformed %s", (key, value) => {
-    useFile({ ...POOL, [key]: value });
-    expect(() => loadAuthEnvironment("dev")).toThrow(`"${key}" is missing or malformed`);
+    expect(() => parseAuthEnvironment(JSON.stringify({ ...POOL, [key]: value }), "test")).toThrow(
+      `"${key}" is missing or malformed`,
+    );
   });
 
   it("refuses a pool from another region", () => {
-    useFile({ ...POOL, userPoolId: "us-east-1_AbC123xyz" });
-    expect(() => loadAuthEnvironment("dev")).toThrow(/isn't in region us-west-2/);
+    expect(() => parseAuthEnvironment(JSON.stringify({ ...POOL, userPoolId: "us-east-1_AbC123xyz" }), "test")).toThrow(
+      /isn't in region us-west-2/,
+    );
   });
 });

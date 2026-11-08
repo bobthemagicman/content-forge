@@ -14,7 +14,7 @@ usage() {
 }
 
 PROFILE=""
-REGION="us-west-2"
+REGION="${AWS_REGION:-us-west-2}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile) PROFILE="${2:-}"; shift 2 ;;

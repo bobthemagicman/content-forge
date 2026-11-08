@@ -20,7 +20,7 @@ export interface AssetsCdnProps {
   envName: string;
   /** Production gets the custom domain, same-site cookies, and the account budget. */
   isProduction: boolean;
-  /** This environment's CloudFront public key (`keys/<envName>.public-key.pem`, research R8). */
+  /** This environment's CloudFront public key, from SSM `/content-forge/<envName>/cloudfront/public-key` (research R8). */
   publicKeyPem: string;
   userPoolId: string;
   userPoolClientId: string;

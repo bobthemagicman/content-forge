@@ -19,7 +19,7 @@ if (isProduction) {
 }
 
 /** The user pool in the auth account: `prod` for master, the shared `dev` pool for sandboxes. */
-export const authEnvironment = loadAuthEnvironment(authEnvFor(envName));
+export const authEnvironment = await loadAuthEnvironment(authEnvFor(envName));
 
 // The app client only redirects to one origin. A mismatch would deploy fine and then fail every
 // sign-in with Cognito's redirect_mismatch, so catch it here.
@@ -27,6 +27,6 @@ const expectedOrigin = isProduction ? APP_ORIGIN : LOCAL_ORIGIN;
 if (authEnvironment.appOrigin !== expectedOrigin) {
   throw new Error(
     `The ${authEnvFor(envName)} user pool redirects to ${authEnvironment.appOrigin}, but this deployment ` +
-      `serves ${expectedOrigin}. Redeploy the pool with the right APP_ORIGIN (quickstart §2).`,
+      `serves ${expectedOrigin}. Redeploy the pool with the right APP_ORIGIN, or check that this deployment reads its own account's SSM (quickstart §2).`,
   );
 }

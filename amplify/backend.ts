@@ -1,10 +1,9 @@
 import { defineBackend } from "@aws-amplify/backend";
-import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { ALLOWED_EMAIL_DOMAIN, APP_ORIGIN, ASSETS_DOMAIN, HOSTED_ZONE_NAME, LOCAL_ORIGIN } from "./config";
 import { AssetsCdn } from "./custom/assets-cdn/construct";
 import { data } from "./data/resource";
 import { authEnvironment, envName, isProduction } from "./deployment";
+import { PARAMETERS, readDeploymentParameter } from "./parameters";
 
 // No `auth` resource: the user pool lives in the auth account (infra/auth, research R21), and this
 // backend only trusts its tokens. The pool's settings (Google only, refresh-only client, no
@@ -12,18 +11,19 @@ import { authEnvironment, envName, isProduction } from "./deployment";
 const backend = defineBackend({ data });
 
 // --- Asset plane (research R6–R8) -------------------------------------------------------------
-const publicKeyPath = fileURLToPath(new URL(`./custom/assets-cdn/keys/${envName}.public-key.pem`, import.meta.url));
-if (!existsSync(publicKeyPath)) {
+const publicKeyParameter = PARAMETERS.signingPublicKey(envName);
+const publicKeyPem = await readDeploymentParameter(publicKeyParameter);
+if (!publicKeyPem?.includes("-----BEGIN PUBLIC KEY-----")) {
   throw new Error(
-    `No CloudFront signing key for environment "${envName}" (${publicKeyPath}). ` +
-      `Run scripts/bootstrap/create-signing-keys.sh --env ${envName} --profile <profile>, then commit the public key.`,
+    `No CloudFront signing key for environment "${envName}" (SSM ${publicKeyParameter}). ` +
+      `Run scripts/bootstrap/create-signing-keys.sh --env ${envName} --profile <this account>.`,
   );
 }
 
 const assets = new AssetsCdn(backend.createStack("assets"), "AssetsCdn", {
   envName,
   isProduction,
-  publicKeyPem: readFileSync(publicKeyPath, "utf8"),
+  publicKeyPem,
   userPoolId: authEnvironment.userPoolId,
   userPoolClientId: authEnvironment.userPoolClientId,
   allowedOrigins: [isProduction ? APP_ORIGIN : LOCAL_ORIGIN],

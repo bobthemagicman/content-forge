@@ -1,11 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { PARAMETERS, readDeploymentParameter } from "./parameters";
 
 /**
  * The user pool this deployment signs users in with. It lives in the auth account, deployed by
  * infra/auth (research R21), which this backend can't read across accounts. So
- * scripts/auth/deploy.sh writes its outputs to `amplify/auth-environments/<dev|prod>.json`, which
- * is committed. None of it is secret: the same values ship in the front end's bundle.
+ * scripts/auth/deploy.sh copies its outputs to the SSM parameter `/content-forge/auth/<dev|prod>`
+ * in the app account. None of it is secret (the front end's bundle ships the same values), but it
+ * identifies one deployment, so it stays out of the repo (docs/deployment/settings.md).
  */
 export interface AuthEnvironment {
   region: string;
@@ -32,29 +32,45 @@ const PATTERNS: Record<Exclude<keyof AuthEnvironment, "issuerUrl">, RegExp> = {
   appOrigin: /^https?:\/\/[^/]+$/,
 };
 
-/**
- * Reads and checks the handover file. `CONTENT_FORGE_AUTH_FILE` overrides the path, for tests.
- */
-export function loadAuthEnvironment(authEnv: "dev" | "prod"): AuthEnvironment {
-  const path =
-    process.env.CONTENT_FORGE_AUTH_FILE ??
-    fileURLToPath(new URL(`./auth-environments/${authEnv}.json`, import.meta.url));
-  if (!existsSync(path)) {
-    throw new Error(
-      `No user pool for auth environment "${authEnv}" (${path}). Deploy it to the auth account with ` +
-        `scripts/auth/deploy.sh --env ${authEnv} --profile <profile>, then commit the file (quickstart §2).`,
-    );
+/** Checks the handover JSON and derives the token issuer. `source` names it in errors. */
+export function parseAuthEnvironment(json: string, source: string): AuthEnvironment {
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    throw new Error(`${source}: not valid JSON.`);
   }
-  const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
   for (const [key, pattern] of Object.entries(PATTERNS)) {
     const value = raw[key];
     if (typeof value !== "string" || !pattern.test(value)) {
-      throw new Error(`${path}: "${key}" is missing or malformed.`);
+      throw new Error(`${source}: "${key}" is missing or malformed.`);
     }
   }
   const env = raw as unknown as Omit<AuthEnvironment, "issuerUrl">;
   if (!env.userPoolId.startsWith(`${env.region}_`)) {
-    throw new Error(`${path}: userPoolId isn't in region ${env.region}.`);
+    throw new Error(`${source}: userPoolId isn't in region ${env.region}.`);
   }
-  return { ...env, issuerUrl: `https://cognito-idp.${env.region}.amazonaws.com/${env.userPoolId}` };
+  const { region, userPoolId, userPoolClientId, domain, appOrigin } = env;
+  return {
+    region,
+    userPoolId,
+    userPoolClientId,
+    domain,
+    appOrigin,
+    issuerUrl: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+  };
+}
+
+/** Reads and checks the handover for `authEnv` from the app account's SSM. */
+export async function loadAuthEnvironment(authEnv: "dev" | "prod"): Promise<AuthEnvironment> {
+  const name = PARAMETERS.authEnvironment(authEnv);
+  const json = await readDeploymentParameter(name);
+  if (json === undefined) {
+    throw new Error(
+      `No user pool for auth environment "${authEnv}": the SSM parameter ${name} doesn't exist in this ` +
+        `account and region. Deploy the pool with scripts/auth/deploy.sh --env ${authEnv} ` +
+        `--auth-profile <auth account> --app-profile <this account> (quickstart §2).`,
+    );
+  }
+  return parseAuthEnvironment(json, name);
 }

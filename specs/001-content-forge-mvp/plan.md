@@ -127,15 +127,14 @@ specs/001-content-forge-mvp/
 amplify/                                  # Amplify Gen 2 backend (CDK under the hood)
 ├── backend.ts                            # defineBackend + AssetsCdn stack + addOutput(auth, custom)
 ├── deployment.ts                         # environment name, and the user pool it signs in with
-├── auth-environment.ts                   # reads auth-environments/<dev|prod>.json (research R21)
-├── auth-environments/{dev,prod}.json     # pool IDs and domain, written by scripts/auth/deploy.sh
+├── auth-environment.ts                   # reads SSM /content-forge/auth/<dev|prod> (research R21)
+├── parameters.ts                         # synth-time SSM reads for deployment settings (research R22)
 ├── data/{schema,resource}.ts             # Content model, indexes, getDownloadUrl query; OIDC auth
 ├── functions/get-download-url/{resource,handler}.ts
 ├── custom/assets-cdn/
 │   ├── construct.ts                      # bucket, both distributions, key group, DownloadEvents, budget
 │   ├── session-handler.ts                # /_session, /_session/signout, /_session/demo/<id>
-│   ├── demo-launch.js                    # CloudFront Function: demo launch link → cookies
-│   └── keys/<env>.public-key.pem         # one per environment (master, sandbox-<user>)
+│   └── demo-launch.js                    # CloudFront Function: demo launch link → cookies
 ├── package.json
 └── tsconfig.json
 
@@ -152,9 +151,9 @@ infra/auth/                               # standalone CDK app, user pools in th
 ├── cdk.json
 └── tsconfig.json
 
-scripts/auth/{deploy,set-google-secret}.sh # deploy a pool + write its handover file; store Google secret
+scripts/auth/{deploy,set-google-secret}.sh # deploy a pool + hand it to the app account's SSM; store Google secret
 
-scripts/bootstrap/create-signing-keys.sh  # key pair per environment → SSM + <env>.public-key.pem
+scripts/bootstrap/create-signing-keys.sh  # key pair per environment → SSM (both keys)
 
 src/
 ├── app/
