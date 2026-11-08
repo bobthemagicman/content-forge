@@ -15,10 +15,8 @@ were replaced by hand. Contrast ratios below were computed, not estimated.
 
 ### Sources, in order of precedence
 
-1. **Example Co brand standards** (Confluence, Sales, Marketing & Branding space):
-   [Corporate Brand & Marketing Standards](https://example.atlassian.net/wiki/brand-standards)
-   and its child page
-   [Visual Standards — Do & Don't Examples](https://example.atlassian.net/wiki/brand-standards).
+1. **The owner's brand standards** (kept privately, outside this repo): the "Corporate Brand &
+   Marketing Standards" page and its child page "Visual Standards — Do & Don't Examples".
    Colors, color roles (lime primary CTA, magenta secondary, amber callouts), and fonts come from there.
 2. **This file.** It extends the brand standards (which cover marketing) into a system for
    internal tools: dark UI, components, states, accessibility.
@@ -67,7 +65,7 @@ authentication). Where a style rule and AA conflict, AA wins and this file recor
 | Magenta | `#D92B83` | Secondary button border and fill, link underlines, background glow |
 | Pink (magenta tint) | `#EE77AE` | Magenta *text* (AA adjustment). Accent for Video and Other |
 | Amber | `#F2A524` | Focus ring, callouts, success. Accent for PowerPoint and Textures |
-| Plum | `#3C1642` | Background glow (from example.com) |
+| Plum | `#3C1642` | Background glow (from the owner's website) |
 | Dark neutral | `#303030` | Text on lime |
 | Light neutral | `#E5E5E5` | Body text on dark |
 
