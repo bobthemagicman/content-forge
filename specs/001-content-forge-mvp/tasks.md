@@ -556,6 +556,7 @@ without a session are denied (quickstart V1–V4, V12).
     `retentionInDays: 14` (Principle I);
   - run quickstart V1–V4 and V12, and record the R3 outcome in
     `specs/001-content-forge-mvp/research.md`.
+  - **Sandbox run (2026-11-07):** the first personal sandbox deployed (after making reserved concurrency production-only). A Workspace account's first Google sign-in created the user with `custom:hd` set, so R3's `allowAdminCreateUserOnly` question is answered for sandboxes. `/_session` with that user's ID token returned `204` and a 12-hour `X-Session-Expires`. Still to do on `master`: everything above.
 
 **Checkpoint**: US1 works on its own. Only allowed accounts get in, and nothing in the catalog is
 exposed.
