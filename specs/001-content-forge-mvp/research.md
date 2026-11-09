@@ -52,6 +52,11 @@ they're the first tasks of implementation.
     generic static files.
 
   Either way no SSR compute is used.
+- **Outcome (first production deploy, 2026-11-08):** the console created the app as `WEB_COMPUTE`
+  with the branch framework "Next.js - SSR", and that first build failed. With the platform set to
+  `WEB` and the framework to plain "Web", the next build succeeded and serves `out/` as static
+  files, with the 404 rewrite and the response headers from `scripts/hosting/apply-settings.sh`.
+  Quickstart §2 step 4.3 has the commands.
 - **Alternatives considered**:
   - S3 + CloudFront hosting defined by hand in CDK: more infrastructure to own.
   - Amplify SSR (`WEB_COMPUTE` with server): violates Principle III.
@@ -455,7 +460,7 @@ they're the first tasks of implementation.
 | Lambda (3 functions) | < 100k invocations | $0 (always-free tier) |
 | CloudFront (2 distributions, 2 functions) | < 1 TB transfer, < 10M requests, < 2M function invocations, shared across both | $0 (always-free tier) |
 | SSM Parameter Store (standard) | 2–4 params | $0 |
-| Route 53 | Existing zone, alias queries free | $0 incremental |
+| Route 53 | Alias queries free. $0 with an existing zone; a delegated `assets.<domain>` zone (quickstart §2 step 1) is $0.50 | $0–0.50 |
 | ACM certificate | Public cert | $0 |
 | CloudWatch Logs | 14-day retention, low volume | ≤ $0.10 |
 | **S3 storage** | ~100 GB (Intelligent-Tiering for archives) | **~$1.50–2.50** |
