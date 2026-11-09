@@ -47,8 +47,8 @@ Sent with `fetch(url, { credentials: 'include', headers: { 'X-Id-Token': idToken
 **Validation (Lambda)**:
 1. The `Origin` is in the allow-list: `https://content.example.com` in production,
    `http://localhost:3000` in personal sandboxes.
-2. The JWT verifies (`aws-jwt-verify`): issuer = user pool, `aud` = app client ID, `token_use = id`,
-   not expired.
+2. The JWT verifies (the `TokenVerifier` port: `jose` against the pool's JWKS, RS256 only): issuer =
+   user pool, `aud` = app client ID, `token_use = id`, not expired.
 3. `email` ends with `@example.com`, `email_verified` is not `false`, and `custom:hd` (Google's
    hosted-domain claim, research R3) is `example.com`, case-insensitively.
 

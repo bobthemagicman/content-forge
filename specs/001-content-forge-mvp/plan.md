@@ -37,8 +37,8 @@ the owner's domain throughout.
 - **Web**: Next.js 16.4 (`output: 'export'`), React 19.3 + React Compiler, Tailwind CSS v4,
   `react-aria-components` 1.22, `aws-amplify` 6.x.
 - **Backend**: `@aws-amplify/backend` 1.25 / `@aws-amplify/backend-cli`, `aws-cdk-lib`,
-  `aws-jwt-verify`, `@aws-sdk/cloudfront-signer`, `@aws-sdk/client-{dynamodb,s3,ssm}`,
-  `@aws-sdk/lib-dynamodb`.
+  `jose`, `@aws-sdk/cloudfront-signer`, `@aws-sdk/client-{dynamodb,s3,ssm}`,
+  `@aws-sdk/util-dynamodb`, `@aws-sdk/lib-dynamodb`.
 - **Ingest**: `@aws-sdk/lib-storage`, `yauzl`, `sharp`, `playwright`, `tsx`, plus system binaries
   `ffmpeg`/`ffprobe`, `soffice`, `pdftoppm`.
 
@@ -233,7 +233,7 @@ still be tested on their own against mocked data.
 
 | Addition | Why Needed | Simpler Alternative Rejected Because |
 |---|---|---|
-| `aws-jwt-verify` | Correct Cognito JWT verification in the session Lambda (JWKS caching, claim checks) | Hand-rolled JWT verification is error-prone, and this is security code (Principle II) |
+| `jose` | Correct JWT verification in the session Lambda (JWKS caching, claim checks) against any OIDC issuer. Replaced `aws-jwt-verify`, which only knows Cognito (specs/003 T136) | Hand-rolled JWT verification is error-prone, and this is security code (Principle II) |
 | `@aws-sdk/cloudfront-signer` | Signed URLs and cookies (FR-018, FR-029) | Hand-rolled RSA-SHA1 policy signing duplicates an official AWS library |
 | `@aws-sdk/client-*`, `lib-dynamodb`, `lib-storage` | DynamoDB, S3 multipart, and SSM access from Lambdas and ingest | No alternative. Official SDK |
 | `yauzl` | Streaming zip reads with per-entry path control for traversal and zip-bomb guards (FR-032) | `unzipper`/`adm-zip` give less control over entry validation, or load whole archives into memory |

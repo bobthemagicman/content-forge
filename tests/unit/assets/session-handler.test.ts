@@ -2,13 +2,16 @@
 import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
-import { FetchError, JwksNotAvailableInCacheError, JwtExpiredError, KidNotFoundInJwksError } from "aws-jwt-verify/error";
 import { mockClient } from "aws-sdk-client-mock";
 import { createVerify, generateKeyPairSync } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { InvalidTokenError } from "../../../amplify/lib/platform/ports";
+
+// The verifier itself is tested against real tokens in tests/unit/platform/server/; here it's a stub.
 const verify = vi.fn();
-vi.mock("aws-jwt-verify", () => ({ CognitoJwtVerifier: { create: () => ({ verify }) } }));
+const createJwtVerifier = vi.fn(() => ({ verify }));
+vi.mock("../../../amplify/lib/platform/jwt-verifier", () => ({ createJwtVerifier }));
 
 const ssm = mockClient(SSMClient);
 const dynamodb = mockClient(DynamoDBClient);
@@ -124,6 +127,11 @@ describe("GET /_session", () => {
   it("verifies the token as a Cognito ID token", async () => {
     const handler = await loadHandler();
     await handler(withToken());
+    expect(createJwtVerifier).toHaveBeenLastCalledWith({
+      issuer: "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_test",
+      audience: "client-test",
+      tokenUse: "id",
+    });
     expect(verify).toHaveBeenCalledWith("header.payload.signature");
   });
 
@@ -136,9 +144,9 @@ describe("GET /_session", () => {
   });
 
   it.each([
-    ["an expired", new JwtExpiredError("Token expired", 0)],
-    ["a forged", new KidNotFoundInJwksError("kid not found")],
-    ["a malformed", new Error("Invalid JWT")],
+    ["an expired", new InvalidTokenError('"exp" claim timestamp check failed')],
+    ["a forged", new InvalidTokenError("no applicable key found in the JSON Web Key Set")],
+    ["a malformed", new InvalidTokenError("Invalid Compact JWS")],
   ])("rejects %s token with 401", async (_, error) => {
     verify.mockRejectedValue(error);
     const handler = await loadHandler();
@@ -185,12 +193,14 @@ describe("GET /_session", () => {
   });
 
   it.each([
-    ["a JWKS fetch failure", new FetchError("https://cognito-idp.example/jwks", "ECONNRESET")],
-    ["no cached JWKS", new JwksNotAvailableInCacheError("not cached")],
-  ])("answers 500, not 401, on %s", async (_, error) => {
-    verify.mockRejectedValue(error);
+    ["a JWKS fetch failure", new TypeError("fetch failed")],
+    ["a JWKS timeout", new Error("request timed out")],
+  ])("answers 500, not 401, on %s", async (_, cause) => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const handler = await loadHandler();
+    // The handler's own copy of the class: loadHandler() resets the module registry.
+    const { KeyFetchError } = await import("../../../amplify/lib/platform/ports");
+    verify.mockRejectedValue(new KeyFetchError({ cause }));
     const result = await handler(withToken());
     expect(result.statusCode).toBe(500);
     expect(body(result)).toEqual({ error: "internal" });
@@ -343,8 +353,8 @@ describe("GET /_session/demo/<id>", () => {
     expect(dynamodb.commandCalls(GetItemCommand)[0]!.args[0].input).toEqual({
       TableName: "Content-test",
       Key: { id: { S: ITEM_ID } },
-      ProjectionExpression: "#status, demoEntryPath",
-      ExpressionAttributeNames: { "#status": "status" },
+      ProjectionExpression: "#f0, #f1",
+      ExpressionAttributeNames: { "#f0": "status", "#f1": "demoEntryPath" },
     });
   });
 

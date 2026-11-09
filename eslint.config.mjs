@@ -35,6 +35,26 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    // The backend's function handlers reach cloud services only through the server ports
+    // (amplify/lib/platform/ports.ts, T136); the ports and the provider-neutral adapters beside them
+    // import no SDK either. AWS adapters live in amplify/lib/platform/aws/.
+    // tests/unit/lint/server-provider-imports.test.ts checks it fires.
+    files: ["amplify/lib/platform/*.ts", "amplify/custom/**/*-handler.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@aws-sdk/*", "aws-jwt-verify", "aws-jwt-verify/*"],
+              message: "Go through a port in amplify/lib/platform/ports.ts; SDK calls belong in amplify/lib/platform/aws/.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
