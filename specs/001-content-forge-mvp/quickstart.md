@@ -165,7 +165,10 @@ them, so nothing else needs setting up.
 
 Plain `npm run dev` runs the beta preview: simulated sign-in on the demo catalog. Without a sandbox,
 `predev`/`prebuild` copy the E2E fixture to `amplify_outputs.json` so the build still works;
-`ampx sandbox` overwrites it with the real file.
+`ampx sandbox` overwrites it with the real file. Either way they then convert it into
+`platform-config.json`, the only deployment file the front end reads (specs/003
+`contracts/platform-config.md`). E2E needs the fixture, so move a sandbox's `amplify_outputs.json`
+aside before `npm run test:e2e`.
 
 The sandbox's environment name is `sandbox-<OS username>`. If your username has characters other
 than letters, digits, `.`, `_` and `-`, synth stops with an error: pick a name and set it for both

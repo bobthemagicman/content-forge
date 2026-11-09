@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // E2E runs against the static export with the mocked backend (tests/e2e/fixtures/mock-backend.ts).
-// The port matches the redirect URIs in tests/e2e/fixtures/amplify_outputs.e2e.json.
+// The port matches the redirect URIs in tests/e2e/fixtures/platform-config.e2e.json.
 const E2E_URL = "http://localhost:4173";
 
 // Firefox and WebKit run the P1 stories only (FR-042).

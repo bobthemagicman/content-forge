@@ -1,0 +1,30 @@
+{
+  "provider": "aws",
+  "auth": {
+    "kind": "cognito",
+    "issuer": "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_E2Etest00",
+    "clientId": "e2etestclientid0000000000",
+    "domain": "e2e-test.auth.us-west-2.amazoncognito.com",
+    "scopes": [
+      "openid",
+      "email",
+      "profile"
+    ],
+    "signInRedirects": [
+      "http://localhost:4173/auth/callback/",
+      "http://localhost:3000/auth/callback/"
+    ],
+    "signOutRedirects": [
+      "http://localhost:4173/",
+      "http://localhost:3000/"
+    ]
+  },
+  "catalog": {
+    "kind": "appsync",
+    "url": "https://e2e.appsync-api.us-west-2.amazonaws.com/graphql",
+    "region": "us-west-2"
+  },
+  "assets": {
+    "baseUrl": "https://assets.e2e.test"
+  }
+}

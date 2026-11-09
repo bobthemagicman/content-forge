@@ -59,6 +59,10 @@ on.
 | `AssetSigner` | Server | `sessionCookies(policy)`, `downloadUrl(key, ttl)`, `demoLaunch(id)` | CloudFront signer |
 | `SettingsStore` | Deploy, server | `get(name)` for the settings in `docs/deployment/settings.md` | SSM, Secrets Manager |
 
+**Status:** the browser ports, `AuthClient` and `CatalogClient`, are in `src/lib/platform/` with
+their AWS adapters in `src/lib/platform/aws/` (T134, T135); the table above describes the app
+before them.
+
 The browser ports are chosen at build time from a provider-neutral config file,
 `platform-config.json` (T132), which each provider's deploy writes. It replaces the front end's
 direct import of `amplify_outputs.json`: on AWS a small step converts one into the other, so Amplify

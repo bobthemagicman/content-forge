@@ -6,14 +6,15 @@
     "node": ">=24"
   },
   "scripts": {
-    "predev": "node scripts/fonts/ensure-fonts.mjs && node scripts/ci/use-e2e-outputs.mjs",
+    "predev": "node scripts/fonts/ensure-fonts.mjs && node scripts/ci/use-e2e-outputs.mjs && node scripts/platform/aws-outputs-to-config.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/fonts/ensure-fonts.mjs && node scripts/ci/use-e2e-outputs.mjs",
+    "prebuild": "node scripts/fonts/ensure-fonts.mjs && node scripts/ci/use-e2e-outputs.mjs && node scripts/platform/aws-outputs-to-config.mjs",
     "build": "next build",
     "build:e2e": "NEXT_PUBLIC_DEMO_MODE=0 npm run build",
     "start": "node scripts/serve-out.mjs",
     "lint": "eslint",
-    "typecheck": "node scripts/ci/use-e2e-outputs.mjs && next typegen && tsc --noEmit && tsc --noEmit -p amplify/tsconfig.json && tsc --noEmit -p infra/edge-cert/tsconfig.json && tsc --noEmit -p infra/auth/tsconfig.json",
+    "typecheck": "node scripts/ci/use-e2e-outputs.mjs && node scripts/platform/aws-outputs-to-config.mjs && next typegen && tsc --noEmit && tsc --noEmit -p amplify/tsconfig.json && tsc --noEmit -p infra/edge-cert/tsconfig.json && tsc --noEmit -p infra/auth/tsconfig.json",
+    "pretest": "node scripts/ci/use-e2e-outputs.mjs && node scripts/platform/aws-outputs-to-config.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test --project=e2e --project=e2e-firefox --project=e2e-webkit",
