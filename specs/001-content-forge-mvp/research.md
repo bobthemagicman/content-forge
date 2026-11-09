@@ -117,11 +117,13 @@ they're the first tasks of implementation.
 - **Spike outcome (2026-11-07, personal sandbox)**: a Workspace account's first Google sign-in
   created the user with `custom:hd` set to the Workspace domain, through the pre-sign-up trigger's
   stricter checks. So the OIDC mapping of `hd` works, and `allowAdminCreateUserOnly: true` doesn't
-  block first-time federated sign-in. Still to confirm on `master` (T054).
+  block first-time federated sign-in. **Confirmed on `master` (2026-11-08, T054)**, with the
+  `prod` pool in the auth account.
 - **Verified on a sandbox (2026-11-07)**: Google sign-in works with these client settings. The
   sign-in access token and one from `GetTokensFromRefreshToken` both carry only `openid profile
   email`, and `UpdateUserAttributes` refuses both with `NotAuthorizedException` (quickstart V2). The
   docs don't say whether a refreshed token keeps the original scopes. This check shows it does.
+  The same check passed in production against the `prod` pool (2026-11-09, T054).
 - **Residual risk** (accepted 2026-11-07, after the PR #134 re-review): leaving the Workspace
   doesn't end access at once. Cognito renews a session from its own refresh token without asking
   Google, and the session function checks `custom:hd` and email, which change only at a Google
