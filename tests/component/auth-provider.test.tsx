@@ -12,7 +12,6 @@ const amplify = vi.hoisted(() => ({
   signInWithRedirect: vi.fn(),
   signOut: vi.fn(),
   hub: [] as HubCallback[],
-  assetsBaseUrl: undefined as string | undefined,
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
@@ -29,10 +28,8 @@ vi.mock("aws-amplify/utils", () => ({
     },
   },
 }));
-vi.mock("@/lib/auth/amplify-config", () => ({
-  configureAmplify: vi.fn(),
-  assetsBaseUrl: () => amplify.assetsBaseUrl,
-}));
+vi.mock("@/lib/auth/amplify-config", () => ({ configureAmplify: vi.fn() }));
+vi.mock("@/lib/config", () => ({ ASSETS_BASE_URL: "https://assets.example.com", DEMO_MODE: false }));
 
 function tokens(claims: Record<string, unknown>) {
   return { tokens: { idToken: { payload: claims, toString: () => "id-token-jwt" } } };
@@ -62,7 +59,8 @@ describe("AuthProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     amplify.hub.length = 0;
-    amplify.assetsBaseUrl = undefined;
+    // Sign-out always calls the asset plane; no test may reach the network.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
     amplify.fetchAuthSession.mockResolvedValue({ tokens: undefined });
     amplify.signInWithRedirect.mockResolvedValue(undefined);
     amplify.signOut.mockResolvedValue(undefined);
@@ -128,7 +126,6 @@ describe("AuthProvider", () => {
   });
 
   it("clears the asset cookies, then signs out", async () => {
-    amplify.assetsBaseUrl = "https://assets.example.com";
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
     renderProvider();
@@ -160,21 +157,10 @@ describe("AuthProvider", () => {
   });
 
   it("still signs out when clearing the asset cookies fails", async () => {
-    amplify.assetsBaseUrl = "https://assets.example.com";
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
     renderProvider();
 
     await act(async () => latest.current!.signOut());
-    expect(amplify.signOut).toHaveBeenCalledOnce();
-  });
-
-  it("skips the asset sign-out before the asset plane exists", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    renderProvider();
-
-    await act(async () => latest.current!.signOut());
-    expect(fetchMock).not.toHaveBeenCalled();
     expect(amplify.signOut).toHaveBeenCalledOnce();
   });
 });

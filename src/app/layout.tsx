@@ -16,7 +16,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${aeonik.variable} ${lato.variable}`}>
+    // Browser extensions add attributes to <html> before React loads. This ignores attribute
+    // differences on this element only; mismatches anywhere below are still reported.
+    <html lang="en" className={`${aeonik.variable} ${lato.variable}`} suppressHydrationWarning>
       <body>
         <Providers>{children}</Providers>
       </body>
