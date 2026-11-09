@@ -52,8 +52,9 @@ Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the au
 
       Each writes the pool's IDs, domain, redirect origin and allowed email domain to the app
       account's SSM (`/content-forge/auth/<env>`), where synth reads them. The session function
-      takes the allowed domain from there, so it always matches the pool's pre-sign-up check. Nothing is committed. Both default to
-      `us-west-2`; pass `--region` for the auth account and `--app-region` for the app account.
+      takes the allowed domain from there, so it always matches the pool's pre-sign-up check.
+      Nothing is committed. Both default to `us-west-2`; pass `--region` for the auth account and
+      `--app-region` for the app account.
    4. Add each pool's redirect URI, which the deploy prints
       (`https://<cognito-domain>/oauth2/idpresponse`), to the Google client's authorized redirect
       URIs.

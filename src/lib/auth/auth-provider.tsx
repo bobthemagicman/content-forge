@@ -11,7 +11,8 @@ export const GOOGLE_PROVIDER_NAME = "GoogleWorkspace";
 import { Hub } from "aws-amplify/utils";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { assetsBaseUrl, configureAmplify } from "./amplify-config";
+import { ASSETS_BASE_URL } from "@/lib/config";
+import { configureAmplify } from "./amplify-config";
 import { type Session, SessionContext, type SessionUser } from "./session";
 
 type SessionState = Pick<Session, "status" | "user">;
@@ -85,10 +86,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // to Cognito's /logout below (seen in WebKit), which would leave the hosted-UI session alive.
     signingOut.current = true;
     setState({ status: "loading", user: null });
-    const base = assetsBaseUrl();
     // Clears the asset cookies (contracts/assets-cdn.md). Best effort: they expire on their own, and
     // a failure here must not keep the user signed in.
-    if (base) await fetch(`${base}/_session/signout`, { credentials: "include" }).catch(() => undefined);
+    await fetch(`${ASSETS_BASE_URL}/_session/signout`, { credentials: "include" }).catch(() => undefined);
     try {
       // Every session here comes from the hosted UI, so this clears the tokens and sends the page
       // through Cognito's /logout, which returns to `/`.

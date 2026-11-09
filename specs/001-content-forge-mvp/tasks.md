@@ -398,8 +398,10 @@ that every story needs
   `import outputs from '@/../amplify_outputs.json'`, and an `assetsBaseUrl()` getter that reads
   `outputs.custom.assetsBaseUrl`.
   - The identity pool is left out of the configuration: the app never uses AWS credentials, and with it every `fetchAuthSession()` also called Cognito Identity, even when signed out, where a failure read as signed out.
-- [ ] T031 [P] Create `src/lib/data/client.ts`. It exports a lazily created
-  `generateClient<Schema>({ authMode: 'userPool' })`, typed from `amplify/data/resource.ts`.
+- [x] T031 [P] Create `src/lib/data/client.ts`. It exports a lazily created
+  `generateClient<Schema>({ authMode: 'oidc' })`, typed from `amplify/data/schema.ts`.
+  - **Changed by T130:** `oidc`, not `userPool`: the pool is in the auth account, so AppSync trusts
+    it in OIDC mode, and Amplify sends the Cognito access token in that mode.
 - [x] T032 [P] Create styled React Aria wrappers in `src/components/ui/`:
   - `button.tsx`, `link.tsx`, `skeleton.tsx`;
   - `banner.tsx`: an inline error with a Retry action;
@@ -426,7 +428,7 @@ that every story needs
   - `signOut()` calls `GET <assetsBaseUrl>/_session/signout` (`credentials: 'include'`), then
     Amplify `signOut()`, then navigates to `/`.
   - **Done:** `src/lib/auth/session.tsx` holds the `Session` API and `useSession()` (in place of `use-session.ts`); `src/lib/auth/auth-provider.tsx` implements it with Cognito and adds `signIn()`. The user comes from the ID token's claims rather than `fetchUserAttributes()`, which would need the `aws.cognito.signin.user.admin` scope. The `(app)` layout does the signed-out redirect. `/_session/signout` is called (best effort) once `custom.assetsBaseUrl` exists (T025). The beta preview's simulation lives on in `src/lib/auth/demo-session.tsx` until T128.
-- [ ] T036 Create `src/lib/assets/asset-session.tsx`. `AssetSessionProvider`:
+- [x] T036 Create `src/lib/assets/asset-session.tsx`. `AssetSessionProvider`:
   - calls `GET <assetsBaseUrl>/_session` with header `X-Id-Token` and `credentials: 'include'`;
   - renders a full-page skeleton until it gets `204`;
   - stores `X-Session-Expires` and refreshes when less than 60 min remain, checked on window focus
@@ -434,7 +436,21 @@ that every story needs
   - exposes `reportAssetError()`, which refreshes once and then sets `needsSignIn`, showing a
     "Session expired, sign in again" banner (FR-029,
     [contracts/assets-cdn.md](./contracts/assets-cdn.md#client-obligations)).
-- [ ] T037 [P] Write unit tests in `tests/unit/assets/asset-session.test.tsx`, mocking `fetch` and
+  - **Done**, with these choices:
+    - asset errors that arrive while a renewal is running count as one failure, so a row of failed
+      thumbnails doesn't skip the retry;
+    - a `401`, or no ID token, signs out;
+    - any other failure of the first exchange shows a retry banner instead, because signing in
+      again wouldn't fix a network error or a `403`;
+    - "Sign in again" signs out to the landing page, since the hosted UI won't start a new sign-in
+      over a live session;
+    - the beta preview skips the exchange: its assets are public files on the site.
+  - **Fixed alongside:** outside the beta preview, `ASSETS_BASE_URL` (`src/lib/config.ts`) now comes
+    from `custom.assetsBaseUrl` in `amplify_outputs.json`, and the build fails without an `https`
+    one. It used to come from `NEXT_PUBLIC_ASSETS_BASE_URL`, which only the E2E build set, so
+    sandbox and production image URLs would have pointed at `/demo/` on the app's host. Sign-out
+    uses the same value.
+- [x] T037 [P] Write unit tests in `tests/unit/assets/asset-session.test.tsx`, mocking `fetch` and
   using fake timers. Cover:
   - children are blocked until `204`;
   - a refresh happens when expiry is under 60 min;
@@ -452,10 +468,13 @@ that every story needs
 - [x] T039 [P] Write unit tests in `tests/unit/assets/image-loader.test.ts` covering width
   rounding (100→320, 321→640, 2000→1280), swapping the width segment in a real `thumb-320` key, and
   the base-URL prefix.
-- [ ] T040 Create `src/app/(app)/layout.tsx` (`'use client'`). It composes `AuthProvider` →
+- [x] T040 Create `src/app/(app)/layout.tsx` (`'use client'`). It composes `AuthProvider` →
   `AssetSessionProvider` → `<main>{children}</main>`, and renders nothing from the catalog until
   both are ready (contracts/ui-routes.md "Global behavior").
-  - **Progress (beta preview):** The layout gates on the session, sends signed-out visitors to `/`, and renders the header and `<main>`. Still to do: `AssetSessionProvider` (T036).
+  - **Progress (beta preview):** The layout gates on the session, sends signed-out visitors to `/`, and renders the header and `<main>`.
+  - **Done:** `AssetSessionProvider` wraps the header and `<main>`, and the expired-session banner
+    sits at the top of `<main>`. E2E checks that `/_session` is the first asset request and carries
+    the ID token, and that a refused session goes back to `/`.
 
 ### Test harnesses
 

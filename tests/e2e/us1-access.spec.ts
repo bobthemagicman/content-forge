@@ -72,6 +72,38 @@ test.describe("US1 access", () => {
     await expect(signInButton(page)).toBeEnabled();
   });
 
+  test("the signed-in shell sets the asset cookies before loading any asset", async ({ page, backend, signedIn }) => {
+    const session = page.waitForRequest((r) => r.url() === `${ASSETS_URL}/_session` && r.method() === "GET");
+    await page.goto("/browse/");
+    // The seeded ID token's payload carries the user's email.
+    const token = (await session).headers()["x-id-token"]!;
+    expect(JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString()).email).toBe(signedIn.email);
+
+    await expect(page.getByRole("button", { name: `Account menu for ${signedIn.name}` })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    const assets = backend.requestsTo("assets").filter((r) => r.method !== "OPTIONS");
+    expect(assets[0]?.url).toBe(`${ASSETS_URL}/_session`);
+  });
+
+  test("a session the asset plane refuses goes back to /", async ({ page, signedIn }) => {
+    void signedIn; // requested for its side effect: a seeded session
+    // Registered after the mock backend's routes, so it takes precedence.
+    await page.route(`${ASSETS_URL}/_session`, (route) =>
+      route.fulfill({
+        status: 401,
+        headers: {
+          "Access-Control-Allow-Origin": route.request().headers()["origin"] ?? "*",
+          "Access-Control-Allow-Credentials": "true",
+          "Access-Control-Allow-Headers": "*",
+        },
+        json: { error: "invalid_token" },
+      }),
+    );
+    await page.goto("/browse/");
+    await expect(page).toHaveURL("/");
+    await expect(signInButton(page)).toBeEnabled();
+  });
+
   test("the landing page has no accessibility violations", async ({ page }) => {
     await page.goto("/");
     await expect(signInButton(page)).toBeEnabled();

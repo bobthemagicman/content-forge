@@ -10,7 +10,7 @@
     "dev": "next dev",
     "prebuild": "node scripts/fonts/ensure-fonts.mjs && node scripts/ci/use-e2e-outputs.mjs",
     "build": "next build",
-    "build:e2e": "NEXT_PUBLIC_DEMO_MODE=0 NEXT_PUBLIC_ASSETS_BASE_URL=https://assets.e2e.test npm run build",
+    "build:e2e": "NEXT_PUBLIC_DEMO_MODE=0 npm run build",
     "start": "node scripts/serve-out.mjs",
     "lint": "eslint",
     "typecheck": "node scripts/ci/use-e2e-outputs.mjs && next typegen && tsc --noEmit && tsc --noEmit -p amplify/tsconfig.json && tsc --noEmit -p infra/edge-cert/tsconfig.json && tsc --noEmit -p infra/auth/tsconfig.json",
