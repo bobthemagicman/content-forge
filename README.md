@@ -76,8 +76,10 @@ Amplify sandbox, and a Google OAuth client. The step-by-step setup, the commands
 sample content, and the validation scenarios are in the
 [quickstart guide](specs/001-content-forge-mvp/quickstart.md).
 
-Secrets such as OAuth client credentials and CloudFront private keys are never committed. They
-live in Amplify secrets and AWS SSM, and `.env*` and key files are excluded by `.gitignore`.
+Nothing that belongs to one deployment is committed: not the secrets (the OAuth client, the
+CloudFront private keys), and not the settings either (domains, account and pool IDs, public keys).
+They live in that deployment's AWS accounts, in Secrets Manager and SSM, and `.env*` and key files
+are excluded by `.gitignore`. See [deployment settings](docs/deployment/settings.md).
 
 ## Roadmap
 
@@ -111,6 +113,10 @@ projects each asset was used on.
   [contracts](specs/001-content-forge-mvp/contracts/).
 - [Constitution](.specify/memory/constitution.md): the principles every change is held to (cost
   discipline, security, static export, accessibility, tested increments).
+- [Deployment settings](docs/deployment/settings.md): what each deployment provides, and where it
+  lives. None of it is in this repo.
+- [Portable deployment plan](specs/003-portable-deployment/plan.md): how other cloud providers
+  would be supported.
 
 ## License
 

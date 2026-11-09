@@ -155,6 +155,7 @@ that every story needs
      (research R8).
   - **Done:** `--region` defaults to `us-west-2`. `--rotate` passes `--overwrite`; without it the script exits if the parameter exists. Checked against a stubbed `aws`: first run, existing key, rotate, and a failed SSM write (exits non-zero and writes no public key). The temporary directory is removed in every case.
   - **Security review:** the script refuses to run while AWS CLI history is enabled for the profile, because history records request parameters, including the private key, in plain text.
+  - **Changed 2026-11-08 (T130, research R22):** step 3 now writes the public key to SSM String `/content-forge/<env>/cloudfront/public-key` instead of the repo, so no deployment's key is committed.
 - [x] T013 [P] Create `src/lib/content-types.ts`. It exports the `CONTENT_TYPES` ordered array:
   `WEBSITE_TEMPLATE`, `POWERPOINT_TEMPLATE`, `VIDEO`, `IMAGE`, `TEXTURE`, `OTHER`. Each entry has:
   - `label` (e.g., "Website Templates");
@@ -176,6 +177,7 @@ that every story needs
   - applies to every `triggerSource`, including `PreSignUp_ExternalProvider` (research R3,
     FR-001/002).
   - **Hosted-domain check (2026-11-07):** now admits only `PreSignUp_ExternalProvider`, and also requires `custom:hd` (Google's `hd` claim) to equal the domain and `email_verified` not to be `"false"`. The session function checks `custom:hd` too.
+  - **Moved by T130:** the handler is now `infra/auth/lib/pre-sign-up.ts`, deployed with the user pool in the auth account (research R21).
 - [x] T015 [P] Write unit tests in `tests/unit/auth/pre-sign-up.test.ts`. Cover:
   - `user@example.com` accepted;
   - `USER@Example.com` accepted;
@@ -195,6 +197,7 @@ that every story needs
   - `triggers: { preSignUp }`.
   - **Hosted-domain check (2026-11-07):** Google is now an OIDC provider named `GoogleWorkspace` (issuer `https://accounts.google.com`), because only OIDC providers can map Google's `hd` claim, to custom attribute `custom:hd` (mutable). `email_verified` is mapped too. The app signs in with `{ provider: { custom: 'GoogleWorkspace' } }`.
   - **Done:** `example.com` and `content.example.com` come from `ALLOWED_EMAIL_DOMAIN` and `APP_ORIGIN` at synth time (`amplify/config.ts`), so the owner's domain stays out of the repo. The app client's OAuth scopes are `OPENID EMAIL PROFILE`. Because `email` login is on, the client also lists `COGNITO` as a provider; no password UI exists, and `allowAdminCreateUserOnly` blocks self sign-up.
+  - **Replaced by T130:** the pool is now `infra/auth/lib/auth-stack.ts` in the auth account, and the app's backend has no `defineAuth` (research R21).
 - [x] T017 [P] Create `amplify/data/resource.ts` with the `Content` model exactly as in
   [data-model.md](./data-model.md#entity-content):
   - enums `ContentType`, `ContentStatus`, `LicenseType`;
@@ -322,7 +325,9 @@ that every story needs
     rejects names the key script can't bootstrap (`tests/unit/environment.test.ts` keeps the two
     patterns in step);
   - read `amplify/custom/assets-cdn/keys/<envName>.public-key.pem`. If it's missing, throw an error
-    telling the developer to run `scripts/bootstrap/create-signing-keys.sh --env <envName>`;
+    telling the developer to run `scripts/bootstrap/create-signing-keys.sh --env <envName>`.
+    **Changed 2026-11-08 (T130, research R22):** it reads SSM
+    `/content-forge/<envName>/cloudfront/public-key` at synth instead;
   - `backend.createStack('assets')` with `new AssetsCdn(...)`, fed from `backend.auth.resources`,
     the key file, `allowedOrigins` (`https://content.example.com` in production,
     `http://localhost:3000` otherwise), and in production `assetsDomain: 'assets.example.com'`,
@@ -351,12 +356,14 @@ that every story needs
   - **Done, with one change:** the response headers and the 404 rewrite aren't in `amplify.yml`. Amplify has deprecated `customHeaders` there, and the CSP must name the real asset host, which stays out of this public repo. `scripts/hosting/apply-settings.sh` builds the R18 headers from `ASSETS_DOMAIN` (`scripts/hosting/custom-headers.mjs`, unit-tested against R18) and applies them with `aws amplify update-app`, like the beta deploy. The cache holds `.npm/` rather than `node_modules/`, which `npm ci` replaces anyway.
 - [ ] T027 (owner) Run the one-time bootstrap from [quickstart.md](./quickstart.md#2-one-time-bootstrap-documented-exceptions-to-everything-as-code):
   1. deploy `infra/edge-cert`;
-  2. run `scripts/bootstrap/create-signing-keys.sh --env master` and commit
-     `keys/master.public-key.pem`;
-  3. create the Internal Google OAuth client;
-  4. connect the Amplify app in `us-west-2`, set secrets `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
-     and env `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, `BUDGET_ALERT_EMAIL`, and map
-     `content.example.com`.
+  2. run `scripts/bootstrap/create-signing-keys.sh --env master`, which puts both keys in SSM;
+  3. create the Internal Google OAuth client, store it with `scripts/auth/set-google-secret.sh`, and
+     deploy the `prod` user pool to the auth account with `scripts/auth/deploy.sh --env prod
+     --auth-profile <p> --app-profile <p>`, which hands it to the app account's SSM (research R21,
+     R22);
+  4. connect the Amplify app in `us-west-2` in the app account, set env `ASSETS_CERT_ARN`,
+     `HOSTED_ZONE_ID`, `BUDGET_ALERT_EMAIL`, give its service role `ssm:GetParameter` on
+     `/content-forge/*`, and map `content.example.com`.
 
   Then deploy the skeleton and **verify R2**: does platform `WEB` with `out/` serve correctly, or
   is the "Web" framework override needed? Record the outcome in
@@ -1107,6 +1114,36 @@ download increases the item's displayed count by one.
   `specs/001-content-forge-mvp/research.md`, check every checkbox in this file, and open the PR from
   `001-content-forge-mvp` to `master` linking issue #1, with a per-principle compliance note
   (constitution: Development Workflow).
+- [x] T130 Move the user pool to a separate auth account (research R21):
+  - `infra/auth`, a standalone CDK app with a `dev` pool (localhost, every sandbox) and a `prod`
+    pool, each with the Google OIDC provider, the refresh-only app client, the domain and the
+    pre-sign-up trigger, which moves from `amplify/auth/` unchanged;
+  - `scripts/auth/set-google-secret.sh` and `scripts/auth/deploy.sh`, which hands the pool's
+    settings to the app account as the SSM String `/content-forge/auth/<env>` (research R22: no
+    deployment's settings in the repo);
+  - the app's backend drops `defineAuth` and reads the handover at synth (`amplify/parameters.ts`);
+    AppSync switches to OIDC mode with the pool as issuer, the session function verifies against
+    the handover's pool and allows its email domain, and `backend.addOutput` writes the `auth`
+    section of `amplify_outputs.json`. The domain is in the handover rather than an
+    `ALLOWED_EMAIL_DOMAIN` variable: a sandbox deployed without the variable fell back to
+    `example.com` and refused every real user;
+  - the CloudFront public keys move to SSM too (T012, T025), and the committed sandbox key is
+    deleted;
+  - tests: `tests/infra/auth-stack.test.ts` takes over the app client checks;
+    `tests/infra/backend-auth.test.ts` checks the backend has no Cognito resources and trusts the
+    handover's pool; `tests/unit/auth-environment.test.ts` and `tests/unit/parameters.test.ts`
+    cover the handover's checks and the SSM reads;
+  - **verify on a sandbox** in the app account: Google sign-in through the `dev` pool, catalog
+    queries through AppSync's OIDC mode (including after a token refresh), `/_session`, and
+    quickstart V2 and V3.
+  - **Verified 2026-11-08** on a sandbox in the app account, with the `dev` pool in the auth
+    account:
+    - Google sign-in round trip;
+    - AppSync: `401` with no token, and an empty list with an access token and with a refreshed one;
+    - `/_session`: `204` and `X-Session-Expires` 12 hours ahead for an ID token, with the domain
+      from the handover; `401` for an access token and for none;
+    - V2: no `aws.cognito.signin.user.admin` scope, both attribute writes refused, `custom:hd` set;
+    - V3: a personal Gmail account stopped by Google, and no new user in the pool.
 - [ ] T128 Retire the beta preview's stand-ins once the backend is live (US1–US3 complete):
   - point `src/lib/data/content.ts` at AppSync only and delete `src/lib/data/demo/`,
     `public/demo/`, and `scripts/demo/`;

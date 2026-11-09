@@ -1,6 +1,6 @@
 import type { PreSignUpTriggerEvent } from "aws-lambda";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handler } from "../../../amplify/auth/pre-sign-up/handler";
+import { handler } from "../../../infra/auth/lib/pre-sign-up";
 
 type TriggerSource = PreSignUpTriggerEvent["triggerSource"];
 

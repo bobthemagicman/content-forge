@@ -13,7 +13,7 @@
     "build:e2e": "NEXT_PUBLIC_DEMO_MODE=0 NEXT_PUBLIC_ASSETS_BASE_URL=https://assets.e2e.test npm run build",
     "start": "node scripts/serve-out.mjs",
     "lint": "eslint",
-    "typecheck": "node scripts/ci/use-e2e-outputs.mjs && next typegen && tsc --noEmit && tsc --noEmit -p amplify/tsconfig.json && tsc --noEmit -p infra/edge-cert/tsconfig.json",
+    "typecheck": "node scripts/ci/use-e2e-outputs.mjs && next typegen && tsc --noEmit && tsc --noEmit -p amplify/tsconfig.json && tsc --noEmit -p infra/edge-cert/tsconfig.json && tsc --noEmit -p infra/auth/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test --project=e2e --project=e2e-firefox --project=e2e-webkit",

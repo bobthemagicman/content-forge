@@ -1,8 +1,8 @@
 /**
  * The deployment environment name (research R19).
  *
- * It names the signing-key file (`custom/assets-cdn/keys/<env>.public-key.pem`) and the SSM
- * parameters (`/content-forge/<env>/...`), so it must be a single path segment.
+ * It names the SSM parameters (`/content-forge/<env>/...`), including the signing keys, so it must
+ * be a single path segment.
  * `scripts/bootstrap/create-signing-keys.sh` accepts exactly the same names;
  * tests/unit/environment.test.ts keeps the two patterns in step.
  */

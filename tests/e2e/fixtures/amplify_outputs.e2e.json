@@ -31,7 +31,7 @@
   "data": {
     "url": "https://e2e.appsync-api.us-west-2.amazonaws.com/graphql",
     "aws_region": "us-west-2",
-    "default_authorization_type": "AMAZON_COGNITO_USER_POOLS",
+    "default_authorization_type": "OPENID_CONNECT",
     "authorization_types": ["AWS_IAM"]
   },
   "custom": {

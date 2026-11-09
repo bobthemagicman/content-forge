@@ -146,7 +146,7 @@ async function authorize(event: APIGatewayProxyEventV2, origin: string | undefin
   // Typed as a boolean, but federated identities can carry it as the string "false".
   const emailVerified: unknown = claims.email_verified;
   const unverified = emailVerified === false || emailVerified === "false";
-  // Google's hosted-domain claim, mapped on every sign-in (amplify/auth/resource.ts). Only
+  // Google's hosted-domain claim, mapped on every sign-in (infra/auth/lib/auth-stack.ts). Only
   // Workspace accounts have it, so this refuses a consumer account using a company address.
   const hostedDomain = claims["custom:hd"];
   const inWorkspace = typeof hostedDomain === "string" && hostedDomain.toLowerCase() === allowedDomain;

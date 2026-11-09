@@ -19,9 +19,9 @@ type SessionState = Pick<Session, "status" | "user">;
 const SIGNED_OUT: SessionState = { status: "signedOut", user: null };
 
 /**
- * The signed-in user, from the ID token's claims (Google's email, name, and picture, mapped by
- * `defineAuth`). Reading the token avoids `fetchUserAttributes()`, which needs the
- * `aws.cognito.signin.user.admin` scope the app client doesn't grant.
+ * The signed-in user, from the ID token's claims (Google's email, name, and picture, mapped by the
+ * user pool's Google provider in infra/auth). Reading the token avoids `fetchUserAttributes()`,
+ * which needs the `aws.cognito.signin.user.admin` scope the app client doesn't grant.
  */
 async function currentUser(): Promise<SessionUser | null> {
   const claims = (await fetchAuthSession()).tokens?.idToken?.payload;

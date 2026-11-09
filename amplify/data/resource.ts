@@ -1,66 +1,28 @@
-import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { defineData } from "@aws-amplify/backend";
+import { authEnvironment } from "../deployment";
+import { schema } from "./schema";
+
+export type { Schema } from "./schema";
 
 /**
- * The catalog (data-model.md, contracts/data-api.md, research R4).
- *
- * Signed-in users can only read, and only through the two index queries: the model's default
- * `getContent`/`listContents` queries would return drafts, and every write comes from ingest or the
- * download function, so all generated operations are disabled.
- *
- * Both indexes are sparse, keyed on attributes that only published items carry, so neither query can
- * return a draft. Amplify generates a public query for every index, so there's deliberately no index
- * on `slug` itself; ingest checks slug uniqueness against the table directly.
+ * The catalog API (contracts/data-api.md). The user pool lives in another AWS account (research
+ * R21), and Amplify's user-pool mode only works with a pool in its own backend, so AppSync checks
+ * the pool's tokens through OIDC instead: the issuer is the pool, which has exactly one app client
+ * (tests/infra/auth-stack.test.ts), so no client ID check is needed. Amplify's client sends the
+ * Cognito access token in this mode.
  */
-const schema = a.schema({
-  // Row order, which is also the display order (FR-007). Kept in step with `src/lib/content-types.ts`
-  // by tests/unit/data/schema.test.ts.
-  ContentType: a.enum(["WEBSITE_TEMPLATE", "POWERPOINT_TEMPLATE", "VIDEO", "IMAGE", "TEXTURE", "OTHER"]),
-  ContentStatus: a.enum(["DRAFT", "PUBLISHED"]),
-  LicenseType: a.enum(["REGULAR", "EXTENDED", "OTHER", "UNKNOWN"]),
-
-  Content: a
-    .model({
-      slug: a.string().required(),
-      // Equal to `slug` on published items and absent on drafts: the key of the sparse slug index.
-      publishedSlug: a.string(),
-      title: a.string().required(),
-      type: a.ref("ContentType").required(),
-      status: a.ref("ContentStatus").required(),
-      // Absent (not null) on drafts, which keeps them out of the sparse type index.
-      publishedAt: a.datetime(),
-      description: a.string(),
-      tags: a.string().required().array(),
-      sourceMarketplace: a.string(),
-      sourceUrl: a.url(),
-      externalDemoUrl: a.url(),
-      licenseType: a.ref("LicenseType").required(),
-      purchaseDate: a.date(),
-      archiveKey: a.string().required(),
-      archiveFileName: a.string().required(),
-      // Float, because GraphQL `Int` is 32-bit and archives can be several GB.
-      archiveBytes: a.float().required(),
-      demoEntryPath: a.string(),
-      accentColor: a.string(),
-      thumbKeys: a.json().required(),
-      previewKeys: a.string().required().array(),
-      videoPreviewKey: a.string(),
-      posterKey: a.string(),
-      meta: a.json(),
-      downloadCount: a.integer().required(),
-    })
-    .secondaryIndexes((index) => [
-      index("publishedSlug").queryField("listContentBySlug"),
-      index("type").sortKeys(["publishedAt"]).queryField("listContentByTypeAndPublishedAt"),
-    ])
-    .disableOperations(["mutations", "subscriptions", "queries"])
-    .authorization((allow) => [allow.authenticated().to(["read"])]),
-});
-
-export type Schema = ClientSchema<typeof schema>;
-
-export { schema };
-
 export const data = defineData({
   schema,
-  authorizationModes: { defaultAuthorizationMode: "userPool" },
+  authorizationModes: {
+    defaultAuthorizationMode: "oidc",
+    oidcAuthorizationMode: {
+      oidcProviderName: "ContentForgeUserPool",
+      oidcIssuerUrl: authEnvironment.issuerUrl,
+      // Cognito's tokens last an hour. A refreshed token keeps the original sign-in's auth_time, and
+      // refresh tokens last 7 days (research R3), so no valid session is older than 7 days plus an
+      // hour. AppSync refuses anything older, as a second check on both.
+      tokenExpireFromIssueInSeconds: 60 * 60,
+      tokenExpiryFromAuthInSeconds: 7 * 24 * 60 * 60 + 60 * 60,
+    },
+  },
 });
