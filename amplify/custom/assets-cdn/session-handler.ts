@@ -1,9 +1,10 @@
-import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
-import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
-import { getSignedCookies } from "@aws-sdk/cloudfront-signer";
-import { CognitoJwtVerifier } from "aws-jwt-verify";
-import { FetchError, JwksNotAvailableInCacheError, JwksValidationError } from "aws-jwt-verify/error";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import { createCloudFrontSigner } from "../../lib/platform/aws/cloudfront-signer";
+import { createDynamoCatalogStore } from "../../lib/platform/aws/dynamodb-catalog";
+import { createSsmSettings } from "../../lib/platform/aws/ssm-settings";
+import { isWorkspaceMember } from "../../lib/platform/identity";
+import { createJwtVerifier } from "../../lib/platform/jwt-verifier";
+import { type Claims, KeyFetchError } from "../../lib/platform/ports";
 
 /**
  * The asset session endpoint behind CloudFront (contracts/assets-cdn.md, research R7, R8, R19).
@@ -15,6 +16,9 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "
  *
  * CloudFront reaches this function URL through OAC, so the token travels in `X-Id-Token`: OAC's
  * SigV4 signature takes the `Authorization` header.
+ *
+ * Every cloud call goes through a port (amplify/lib/platform/ports.ts, T136): the token check, the
+ * signing settings, the catalog read and the CloudFront signing.
  */
 
 const SESSION_SECONDS = 12 * 60 * 60;
@@ -22,7 +26,8 @@ const SESSION_SECONDS = 12 * 60 * 60;
 // demos to see each other (FR-027, FR-029). Matches MAX_AGE_SECONDS in demo-launch.js.
 const DEMO_SESSION_SECONDS = SESSION_SECONDS;
 const DEMO_PATH = /^\/_session\/demo\/([A-Za-z0-9-]{1,64})$/;
-const COOKIE_NAMES = ["CloudFront-Policy", "CloudFront-Signature", "CloudFront-Key-Pair-Id"] as const;
+// Where the user pool puts Google's hosted domain (infra/auth/lib/auth-stack.ts).
+const HOSTED_DOMAIN_CLAIM = "custom:hd";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -39,43 +44,23 @@ if (cookieMode !== "same-site" && cookieMode !== "cross-site") {
   throw new Error(`session-handler: COOKIE_MODE must be same-site or cross-site, not ${cookieMode}`);
 }
 
-const verifier = CognitoJwtVerifier.create({
-  userPoolId: requireEnv("USER_POOL_ID"),
-  clientId: requireEnv("USER_POOL_CLIENT_ID"),
+const userPoolId = requireEnv("USER_POOL_ID");
+// A user pool ID starts with its region: `us-west-2_AbC123`.
+const userPoolRegion = userPoolId.split("_")[0];
+
+// Cognito ID tokens only: they carry the email and hosted domain, and their audience is the client.
+const verifier = createJwtVerifier({
+  issuer: `https://cognito-idp.${userPoolRegion}.amazonaws.com/${userPoolId}`,
+  audience: requireEnv("USER_POOL_CLIENT_ID"),
   tokenUse: "id",
 });
-
-const ssm = new SSMClient({});
-const dynamodb = new DynamoDBClient({});
-
-interface SigningConfig {
-  assetHost: string;
-  keyPairId: string;
-  privateKey: string;
-}
-
-let signingConfig: Promise<SigningConfig> | undefined;
-
-async function readParameter(name: string, withDecryption = false): Promise<string> {
-  const { Parameter } = await ssm.send(new GetParameterCommand({ Name: name, WithDecryption: withDecryption }));
-  if (!Parameter?.Value) throw new Error(`session-handler: SSM parameter ${name} is empty`);
-  return Parameter.Value;
-}
-
-/** Reads the signing settings once per container. A failed read isn't cached, so the next call retries. */
-function loadSigningConfig(): Promise<SigningConfig> {
-  signingConfig ??= Promise.all([
-    readParameter(requireEnv("ASSETS_DOMAIN_PARAM")),
-    readParameter(requireEnv("KEY_PAIR_ID_PARAM")),
-    readParameter(requireEnv("PRIVATE_KEY_PARAM"), true),
-  ])
-    .then(([assetHost, keyPairId, privateKey]) => ({ assetHost, keyPairId, privateKey }))
-    .catch((error: unknown) => {
-      signingConfig = undefined;
-      throw error;
-    });
-  return signingConfig;
-}
+const signer = createCloudFrontSigner(createSsmSettings(), {
+  assetHostSetting: requireEnv("ASSETS_DOMAIN_PARAM"),
+  keyPairIdSetting: requireEnv("KEY_PAIR_ID_PARAM"),
+  privateKeySetting: requireEnv("PRIVATE_KEY_PARAM"),
+  demosHost,
+});
+const catalog = createDynamoCatalogStore(contentTable);
 
 type Result = APIGatewayProxyStructuredResultV2;
 
@@ -114,11 +99,6 @@ function cookieAttributes(maxAge: number): string {
   return `Path=/v/; Secure; HttpOnly; SameSite=${sameSite}; Max-Age=${maxAge}`;
 }
 
-/** Failures to reach or read the user pool's signing keys: an outage, not a bad token. */
-function isKeyFetchFailure(error: unknown): boolean {
-  return error instanceof FetchError || error instanceof JwksValidationError || error instanceof JwksNotAvailableInCacheError;
-}
-
 /**
  * The checks every signed grant needs: an allowed `Origin`, a valid Cognito ID token, a verified
  * address in the allowed domain, and that domain as the Google Workspace (`custom:hd`). Returns the
@@ -130,33 +110,20 @@ async function authorize(event: APIGatewayProxyEventV2, origin: string | undefin
   const token = header(event, "X-Id-Token");
   if (!token) return json(401, "invalid_token", origin);
 
-  let claims: Awaited<ReturnType<typeof verifier.verify>>;
+  let claims: Claims;
   try {
     claims = await verifier.verify(token);
   } catch (error) {
     // Telling the user to sign in again wouldn't help during an outage.
-    if (isKeyFetchFailure(error)) {
+    if (error instanceof KeyFetchError) {
       console.error("session-handler: could not load the user pool's signing keys", error);
       return json(500, "internal", origin);
     }
     return json(401, "invalid_token", origin);
   }
 
-  const email = typeof claims.email === "string" ? claims.email.toLowerCase() : "";
-  // Typed as a boolean, but federated identities can carry it as the string "false".
-  const emailVerified: unknown = claims.email_verified;
-  const unverified = emailVerified === false || emailVerified === "false";
-  // Google's hosted-domain claim, mapped on every sign-in (infra/auth/lib/auth-stack.ts). Only
-  // Workspace accounts have it, so this refuses a consumer account using a company address.
-  const hostedDomain = claims["custom:hd"];
-  const inWorkspace = typeof hostedDomain === "string" && hostedDomain.toLowerCase() === allowedDomain;
-  if (!email.endsWith(`@${allowedDomain}`) || unverified || !inWorkspace) return json(403, "forbidden", origin);
+  if (!isWorkspaceMember(claims, allowedDomain, HOSTED_DOMAIN_CLAIM)) return json(403, "forbidden", origin);
   return undefined;
-}
-
-/** A custom policy for every URL under `resource`, valid until `expiresAt` (epoch seconds). */
-function customPolicy(resource: string, expiresAt: number): string {
-  return JSON.stringify({ Statement: [{ Resource: resource, Condition: { DateLessThan: { "AWS:EpochTime": expiresAt } } }] });
 }
 
 async function issueSession(event: APIGatewayProxyEventV2, origin: string | undefined): Promise<Result> {
@@ -164,19 +131,13 @@ async function issueSession(event: APIGatewayProxyEventV2, origin: string | unde
   if (denied) return denied;
 
   try {
-    const { assetHost, keyPairId, privateKey } = await loadSigningConfig();
-    const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-    const policy = customPolicy(`https://${assetHost}/v/*`, expiresAt);
-    const signed = getSignedCookies({ keyPairId, privateKey, policy });
+    const expiresAt = new Date((Math.floor(Date.now() / 1000) + SESSION_SECONDS) * 1000);
+    const signed = await signer.sessionCookies(expiresAt);
     const attributes = cookieAttributes(SESSION_SECONDS);
     return {
       statusCode: 204,
-      headers: {
-        ...corsHeaders(origin),
-        "Cache-Control": "no-store",
-        "X-Session-Expires": new Date(expiresAt * 1000).toISOString(),
-      },
-      cookies: COOKIE_NAMES.map((name) => `${name}=${signed[name]}; ${attributes}`),
+      headers: { ...corsHeaders(origin), "Cache-Control": "no-store", "X-Session-Expires": expiresAt.toISOString() },
+      cookies: Object.entries(signed).map(([name, value]) => `${name}=${value}; ${attributes}`),
     };
   } catch (error) {
     console.error("session-handler: could not sign the asset session", error);
@@ -205,16 +166,9 @@ async function issueDemoLaunch(event: APIGatewayProxyEventV2, origin: string | u
   if (denied) return denied;
 
   try {
-    const { Item } = await dynamodb.send(
-      new GetItemCommand({
-        TableName: contentTable,
-        Key: { id: { S: id } },
-        ProjectionExpression: "#status, demoEntryPath",
-        ExpressionAttributeNames: { "#status": "status" },
-      }),
-    );
+    const item = await catalog.get(id, ["status", "demoEntryPath"]);
     // Drafts are as invisible here as they are in the catalog API.
-    const entryPath = Item?.status?.S === "PUBLISHED" ? Item.demoEntryPath?.S : undefined;
+    const entryPath = item?.status === "PUBLISHED" ? item.demoEntryPath : undefined;
     if (!entryPath) return json(404, "not_found", origin);
 
     const encodedEntry = encodeEntryPath(entryPath);
@@ -223,19 +177,12 @@ async function issueDemoLaunch(event: APIGatewayProxyEventV2, origin: string | u
       return json(500, "internal", origin);
     }
 
-    const { keyPairId, privateKey } = await loadSigningConfig();
-    const expiresAt = Math.floor(Date.now() / 1000) + DEMO_SESSION_SECONDS;
-    const signed = getSignedCookies({ keyPairId, privateKey, policy: customPolicy(`https://${demosHost}/${id}/*`, expiresAt) });
-    // The values are URL-safe base64 and key IDs, so they need no encoding (URLSearchParams would
-    // turn `~` into `%7E`, which the launch function would then copy into the cookie).
-    const query = `p=${signed["CloudFront-Policy"]}&s=${signed["CloudFront-Signature"]}&k=${signed["CloudFront-Key-Pair-Id"]}`;
+    const expiresAt = new Date((Math.floor(Date.now() / 1000) + DEMO_SESSION_SECONDS) * 1000);
+    const url = await signer.demoLaunchUrl(id, encodedEntry, expiresAt);
     return {
       statusCode: 200,
       headers: { ...corsHeaders(origin), "Content-Type": "application/json", "Cache-Control": "no-store" },
-      body: JSON.stringify({
-        url: `https://${demosHost}/_launch/${id}/${encodedEntry}?${query}`,
-        expiresAt: new Date(expiresAt * 1000).toISOString(),
-      }),
+      body: JSON.stringify({ url, expiresAt: expiresAt.toISOString() }),
     };
   } catch (error) {
     console.error("session-handler: could not issue the demo launch link", error);
@@ -249,7 +196,7 @@ function clearSession(origin: string | undefined): Result {
   return {
     statusCode: 204,
     headers: { ...corsHeaders(origin), "Cache-Control": "no-store" },
-    cookies: COOKIE_NAMES.map((name) => `${name}=; ${attributes}`),
+    cookies: signer.cookieNames.map((name) => `${name}=; ${attributes}`),
   };
 }
 

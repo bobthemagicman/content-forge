@@ -232,7 +232,8 @@ they're the first tasks of implementation.
 - **Decision**:
   - `GET https://assets.example.com/_session` with header `X-Id-Token: <Cognito ID token>`,
     called with `fetch(..., { credentials: 'include' })`.
-  - The Lambda verifies the token with `aws-jwt-verify` (user pool, client ID, `token_use=id`) and
+  - The Lambda verifies the token (user pool, client ID, `token_use=id`; `jose` against the pool's
+    JWKS since specs/003 T136, `aws-jwt-verify` before) and
     checks the `email` domain. It then returns `204` with three `Set-Cookie` headers:
     `CloudFront-Policy`, `CloudFront-Signature`, `CloudFront-Key-Pair-Id`.
   - Cookie attributes in production: host-only, `Path=/v/; Secure; HttpOnly; SameSite=Lax`, 12 h
@@ -645,7 +646,7 @@ that account has its own bill.
     - Tokens are refused more than an hour after issue, or more than 7 days and an hour after the
       sign-in they come from. That's the access-token and refresh-token lifetimes again, as a
       second check.
-  - **The session function** verifies ID tokens against the pool and client from the handover. `aws-jwt-verify` only needs the pool's public keys, so it works across accounts.
+  - **The session function** verifies ID tokens against the pool and client from the handover. The verifier only needs the pool's public keys, so it works across accounts.
   - **`amplify_outputs.json`** gets the same `auth` section Amplify writes for its own pool, through
     `backend.addOutput`, so the front end is unchanged.
   - **The Google client ID and secret** are in Secrets Manager in the auth account

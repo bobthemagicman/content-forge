@@ -57,7 +57,7 @@ T131 is #139, and so on up to T146, #154. `[P]` means it can run in parallel wit
     demo catalog, as before.
   - The lint rule also refuses `amplify_outputs.json` and `amplify/` imports in `src/`
     (`tests/unit/lint/provider-imports.test.ts`).
-- [ ] T136 Put the server-side cloud calls behind ports in a shared `packages/platform/` (or
+- [x] T136 Put the server-side cloud calls behind ports in a shared `packages/platform/` (or
   `amplify/lib/platform/`): `TokenVerifier`, `CatalogStore`, `AssetSigner`, `SettingsStore`.
   - `TokenVerifier` uses `jose` with the issuer's JWKS, so it works with any OIDC broker. It
     replaces `aws-jwt-verify` in the session and download functions, and keeps every check in
@@ -66,6 +66,28 @@ T131 is #139, and so on up to T146, #154. `[P]` means it can run in parallel wit
   - Port contract tests every adapter must pass, starting with the AWS ones.
   - The existing session-handler tests pass unchanged, plus a test that a token from another
     issuer, or with `alg: none`, is refused.
+  - **Done.** The ports are in `amplify/lib/platform/ports.ts`:
+    - the neutral adapters beside them: `jwt-verifier.ts` (`jose`, RS256 only, `exp` and `iat`
+      required), `identity.ts` (the email, `email_verified` and hosted-domain rules, with the claim
+      name as a parameter), and `directory-settings.ts` (files, for tests and offline synth);
+    - the AWS adapters in `aws/`: SSM, DynamoDB and CloudFront.
+  - The session handler uses only the ports, and `amplify/parameters.ts` reads synth settings
+    through `SettingsStore`. `CatalogStore` has only `get` so far, and `AssetSigner.downloadUrl`
+    is ready for US3. Ingest (T137) and downloads add the other methods when they need them.
+  - Contract suites, in `tests/unit/platform/server/contracts/`:
+    - `TokenVerifier`: another issuer or audience, expired, no expiry, the wrong `token_use`,
+      another key, `alg: none`, an unknown key ID, HS256 keyed with the public key. Run with a
+      local key set and a fetched one.
+    - `SettingsStore`: SSM, and the directory store.
+    - `CatalogStore`: DynamoDB, with projections applied.
+    - `AssetSigner`: CloudFront.
+  - Key-fetch failures (network, non-200, bad JSON, not a key set) are `KeyFetchError`, so the
+    handler still answers `500`, not `401`, during an outage.
+  - The session-handler tests keep every case. Only the verifier stub changed: it now stubs
+    `createJwtVerifier` and throws the port's errors instead of `aws-jwt-verify`'s. The demo
+    projection test expects the adapter's placeholders.
+  - ESLint now refuses `@aws-sdk/*` and `aws-jwt-verify` in function handlers and the neutral
+    platform code (`tests/unit/lint/server-provider-imports.test.ts`).
 - [ ] T137 Build the ingest CLI (001 Phase 4, T055 onward) on `ObjectStore` and `CatalogStore`,
   with S3 and DynamoDB adapters, so the pipeline in `contracts/ingest-cli.md` has no AWS imports
   outside its adapters. If those tasks are already done when this starts, refactor them instead.
