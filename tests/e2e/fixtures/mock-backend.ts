@@ -5,24 +5,25 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test as base, expect, type Page, type Route } from "@playwright/test";
-import outputs from "./amplify_outputs.e2e.json";
+import config from "./platform-config.e2e.json";
 
 const root = join(__dirname, "..", "..", "..");
 
-// The build bakes in whatever amplify_outputs.json is at the repo root. The mocks only match the
-// fixture, so a sandbox's real file would send the app to endpoints nothing here answers.
-const baked = JSON.parse(readFileSync(join(root, "amplify_outputs.json"), "utf8"));
-if (baked.auth?.user_pool_client_id !== outputs.auth.user_pool_client_id) {
+// The build bakes in whatever platform-config.json is at the repo root (T132). The mocks only match
+// the fixture, so a sandbox's real file would send the app to endpoints nothing here answers.
+const baked = JSON.parse(readFileSync(join(root, "platform-config.json"), "utf8"));
+if (baked.auth?.clientId !== config.auth.clientId) {
   throw new Error(
-    "E2E needs tests/e2e/fixtures/amplify_outputs.e2e.json as amplify_outputs.json. Move your sandbox's file aside and rerun.",
+    "E2E needs the fixture backend: move your sandbox's amplify_outputs.json aside, then rerun (prebuild regenerates platform-config.json from tests/e2e/fixtures/amplify_outputs.e2e.json).",
   );
 }
 
-const CLIENT_ID = outputs.auth.user_pool_client_id;
-export const COGNITO_DOMAIN = `https://${outputs.auth.oauth.domain}`;
-export const APPSYNC_URL = outputs.data.url;
-export const ASSETS_URL = outputs.custom.assetsBaseUrl;
-const COGNITO_IDP = `https://cognito-idp.${outputs.auth.aws_region}.amazonaws.com/`;
+const CLIENT_ID = config.auth.clientId;
+export const COGNITO_DOMAIN = `https://${config.auth.domain}`;
+export const APPSYNC_URL = config.catalog.url;
+export const ASSETS_URL = config.assets.baseUrl;
+// The user pool API (token revocation), at the issuer's origin.
+const COGNITO_IDP = `${new URL(config.auth.issuer).origin}/`;
 
 export type RequestKind = "appsync" | "assets" | "cognito" | "unexpected";
 

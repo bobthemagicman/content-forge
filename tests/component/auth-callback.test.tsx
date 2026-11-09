@@ -18,7 +18,7 @@ vi.mock("aws-amplify/utils", () => ({
     },
   },
 }));
-vi.mock("@/lib/auth/amplify-config", () => ({ configureAmplify: vi.fn() }));
+vi.mock("@/lib/platform/aws/amplify", () => ({ configureAmplify: vi.fn() }));
 
 const visit = (url: string) => window.history.replaceState({}, "", url);
 

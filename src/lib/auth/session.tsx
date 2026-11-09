@@ -1,23 +1,20 @@
 "use client";
 
 // The session API every page uses (T035): status, user, sign in/out, and the ID token for the asset
-// session (T036). Two providers implement it: `AuthProvider` (Cognito via Amplify) and, for the beta
-// preview, `DemoSessionProvider`. `Providers` picks one with DEMO_MODE.
+// session (T036). Two providers implement it: `AuthProvider` (the deployment's AuthClient) and, for
+// the beta preview, `DemoSessionProvider`. `Providers` picks one with DEMO_MODE.
 
 import { createContext, useContext } from "react";
+import type { AuthUser } from "@/lib/platform/auth";
 
-export interface SessionUser {
-  email: string;
-  name: string;
-  picture?: string;
-}
+export type SessionUser = AuthUser;
 
 export interface Session {
   status: "loading" | "signedIn" | "signedOut";
   user: SessionUser | null;
   signIn: () => void;
   signOut: () => void;
-  /** The current Cognito ID token, refreshed if needed; undefined when signed out. */
+  /** The current ID token, refreshed if needed; undefined when signed out. */
   idToken: () => Promise<string | undefined>;
 }
 

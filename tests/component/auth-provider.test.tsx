@@ -1,7 +1,8 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider, GOOGLE_PROVIDER_NAME } from "@/lib/auth/auth-provider";
+import { AuthProvider } from "@/lib/auth/auth-provider";
+import { GOOGLE_PROVIDER_NAME } from "@/lib/platform/aws/auth";
 import { type Session, useSession } from "@/lib/auth/session";
 
 type HubCallback = (data: { payload: { event: string } }) => void;
@@ -28,8 +29,13 @@ vi.mock("aws-amplify/utils", () => ({
     },
   },
 }));
-vi.mock("@/lib/auth/amplify-config", () => ({ configureAmplify: vi.fn() }));
-vi.mock("@/lib/config", () => ({ ASSETS_BASE_URL: "https://assets.example.com", DEMO_MODE: false }));
+vi.mock("aws-amplify/auth/enable-oauth-listener", () => ({}));
+vi.mock("@/lib/platform/aws/amplify", () => ({ configureAmplify: vi.fn() }));
+vi.mock("@/lib/config", async () => ({
+  ASSETS_BASE_URL: "https://assets.example.com",
+  DEMO_MODE: false,
+  PLATFORM_CONFIG: (await import("../e2e/fixtures/platform-config.e2e.json")).default,
+}));
 
 function tokens(claims: Record<string, unknown>) {
   return { tokens: { idToken: { payload: claims, toString: () => "id-token-jwt" } } };

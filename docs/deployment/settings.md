@@ -38,9 +38,10 @@ AWS-only settings, with no counterpart elsewhere:
 
 ## What a deployment hands to the web app
 
-The front end is a static export, so the settings it needs are baked in at build time from the
-backend's outputs (`amplify_outputs.json` on AWS, which git ignores). None of these are secret:
-the bundle ships them to every visitor.
+The front end is a static export, so the settings it needs are baked in at build time from
+`platform-config.json` (specs/003 `contracts/platform-config.md`), which git ignores. On AWS it's
+converted from the backend's outputs, `amplify_outputs.json`. None of these are secret: the bundle
+ships them to every visitor.
 
 | Output | What it is |
 |---|---|

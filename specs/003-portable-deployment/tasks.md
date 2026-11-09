@@ -15,13 +15,18 @@ T131 is #139, and so on up to T146, #154. `[P]` means it can run in parallel wit
   managed secret store, a budget alert, and hosts on a public suffix for demos. Principle I's
   budget applies per deployment. Bump the version, and update `plan.md`'s constitution checks in
   001 and here.
-- [ ] T132 [P] Define `platform-config.json`, the provider-neutral config the web build reads
+- [x] T132 [P] Define `platform-config.json`, the provider-neutral config the web build reads
   (plan "Ports"), as a TypeScript type with a validator in `src/lib/platform/config.ts`, plus a
   contract page `contracts/platform-config.md` in this folder.
   - On AWS, `scripts/platform/aws-outputs-to-config.mjs` converts `amplify_outputs.json`, and
     `predev`/`prebuild` run it. The E2E fixture gets a `platform-config.json` twin.
   - Tests: the converter on the E2E fixture; the validator refuses a missing issuer, a non-HTTPS
     URL (except `http://localhost`), and an unknown `kind`.
+  - **Done.** The contract is [contracts/platform-config.md](./contracts/platform-config.md).
+    - `catalog` carries only the GraphQL endpoint and region, not Amplify's model introspection. So
+      the AppSync adapter (T084, T096) sends named GraphQL documents with `client.graphql()`
+      instead of `client.models`.
+    - `pretest` runs the converter too, and the E2E mocks read their endpoints from the twin.
 - [ ] T133 [P] Choose the IaC tool for providers other than AWS and record it as a research entry
   in this folder. The plan recommends Pulumi with TypeScript; compare it with OpenTofu on: unit
   testing in Vitest, sharing the settings types, state storage cost (Pulumi Cloud's free tier or a
@@ -29,16 +34,29 @@ T131 is #139, and so on up to T146, #154. `[P]` means it can run in parallel wit
 
 ## Phase 1: Ports in the app, AWS adapters only (no behavior change)
 
-- [ ] T134 [P] Put sign-in behind an `AuthClient` port in `src/lib/platform/auth.ts`: `signIn()`,
+- [x] T134 [P] Put sign-in behind an `AuthClient` port in `src/lib/platform/auth.ts`: `signIn()`,
   `signOut()`, `idToken()`, `accessToken()`, and a session-change subscription. Move the Amplify
   code from `src/lib/auth/auth-provider.tsx` and `amplify-config.ts` into
   `src/lib/platform/aws/auth.ts`; `AuthProvider` uses only the port, picked from
   `platform-config.json` (T132). The existing component and E2E tests pass unchanged.
-- [ ] T135 [P] Put catalog reads behind a `CatalogClient` port: the three functions
+  - **Done.** The port also has `currentUser()` and `completeSignIn(onResult)`, so the callback page
+    (`src/components/auth/auth-callback.tsx`) uses it too. `completeSignIn` takes a callback rather
+    than returning a promise, so the redirect still happens in the same tick as the broker's event.
+  - The component tests needed only their module mocks repointed: `@/lib/platform/aws/amplify`
+    instead of `@/lib/auth/amplify-config`, `GOOGLE_PROVIDER_NAME` from the adapter, and
+    `PLATFORM_CONFIG` in the `@/lib/config` mock. Their cases and assertions are unchanged. The
+    E2E tests are unchanged.
+- [x] T135 [P] Put catalog reads behind a `CatalogClient` port: the three functions
   `src/lib/data/content.ts` exports, with the demo catalog as one adapter and AppSync (T084, T096)
   as the AWS one in `src/lib/platform/aws/catalog.ts`. Add an ESLint `no-restricted-imports` rule
   that allows `aws-amplify` and `@aws-sdk/*` only under `src/lib/platform/aws/` (and `amplify/`,
   `tools/`), with a test that the rule fires.
+  - **Done.** The port is `src/lib/platform/catalog.ts`, the demo adapter
+    `src/lib/platform/demo/catalog.ts`. `src/lib/platform/aws/catalog.ts` holds the shared
+    GraphQL client until T084 and T096 build the adapter on it; until then every build uses the
+    demo catalog, as before.
+  - The lint rule also refuses `amplify_outputs.json` and `amplify/` imports in `src/`
+    (`tests/unit/lint/provider-imports.test.ts`).
 - [ ] T136 Put the server-side cloud calls behind ports in a shared `packages/platform/` (or
   `amplify/lib/platform/`): `TokenVerifier`, `CatalogStore`, `AssetSigner`, `SettingsStore`.
   - `TokenVerifier` uses `jose` with the issuer's JWKS, so it works with any OIDC broker. It

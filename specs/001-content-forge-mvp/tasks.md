@@ -405,10 +405,15 @@ that every story needs
   `import outputs from '@/../amplify_outputs.json'`, and an `assetsBaseUrl()` getter that reads
   `outputs.custom.assetsBaseUrl`.
   - The identity pool is left out of the configuration: the app never uses AWS credentials, and with it every `fetchAuthSession()` also called Cognito Identity, even when signed out, where a failure read as signed out.
+  - **Moved by specs/003 T132/T134:** now `src/lib/platform/aws/amplify.ts`, which configures
+    Amplify from `platform-config.json`. The asset host comes from `ASSETS_BASE_URL` in
+    `src/lib/config.ts`.
 - [x] T031 [P] Create `src/lib/data/client.ts`. It exports a lazily created
   `generateClient<Schema>({ authMode: 'oidc' })`, typed from `amplify/data/schema.ts`.
   - **Changed by T130:** `oidc`, not `userPool`: the pool is in the auth account, so AppSync trusts
     it in OIDC mode, and Amplify sends the Cognito access token in that mode.
+  - **Moved by specs/003 T135:** now `graphqlClient()` in `src/lib/platform/aws/catalog.ts`,
+    untyped, because `platform-config.json` doesn't carry Amplify's model introspection (T084).
 - [x] T032 [P] Create styled React Aria wrappers in `src/components/ui/`:
   - `button.tsx`, `link.tsx`, `skeleton.tsx`;
   - `banner.tsx`: an inline error with a Retry action;
@@ -852,10 +857,12 @@ catalog shows the empty state (quickstart V5).
 
 ### Implementation for User Story 2
 
-- [ ] T084 [P] [US2] Implement `listRow(type, { limit = 20, nextToken })` in `src/lib/data/content.ts`.
-  It calls `client.models.Content.listContentByTypeAndPublishedAt({ type, sortDirection: 'DESC',
-  limit, nextToken }, { selectionSet: ['id','slug','title','type','thumbKeys'] })` and returns
-  `{ items, nextToken }` ([contracts/data-api.md](./contracts/data-api.md#1-list-a-browse-row)).
+- [ ] T084 [P] [US2] Implement `listRow(type, { limit = 20, nextToken })` in the AppSync
+  `CatalogClient` adapter, `src/lib/platform/aws/catalog.ts` (specs/003 T135). It sends a named
+  GraphQL document for `listContentByTypeAndPublishedAt(type, sortDirection: DESC, limit,
+  nextToken)` with the selection set `id slug title type thumbKeys` through `graphqlClient()`, and
+  returns `{ items, nextToken }` ([contracts/data-api.md](./contracts/data-api.md#1-list-a-browse-row)).
+  `catalogClient()` picks the adapter when DEMO_MODE is off.
   - **Progress (beta preview):** `listRow` exists with the contract's signature and is served by the demo catalog (`src/lib/data/demo/`). Still to do: the AppSync query.
 - [x] T085 [US2] Implement `useRow(type)` in `src/lib/data/use-row.ts`, holding
   `{ items, status: 'loading'|'ready'|'error', hasMore, loadMore(), retry() }`. It depends on T084.
@@ -954,8 +961,8 @@ goes up by one. Unknown slugs show not-found (quickstart V6, V7).
     covers `HeadObject`), and `ssm:GetParameter` + `kms:Decrypt` on the three parameters;
   - use SSM paths rather than stack references where possible, to avoid cross-stack cycles
     (research R9).
-- [ ] T096 [P] [US3] Add `getBySlug(slug)` and `requestDownloadUrl(contentId)` to
-  `src/lib/data/content.ts`:
+- [ ] T096 [P] [US3] Add `getBySlug(slug)` and `requestDownloadUrl(contentId)` to the AppSync
+  `CatalogClient` adapter (`src/lib/platform/aws/catalog.ts`, as named GraphQL documents like T084):
   - `getBySlug` uses `listContentBySlug(publishedSlug)` and returns the first item, or `null` when it's missing
     or not `PUBLISHED`. If there's more than one match, it logs a warning;
   - `requestDownloadUrl` maps GraphQL `errors[].errorType` to a typed error.

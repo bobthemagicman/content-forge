@@ -1,18 +1,14 @@
 "use client";
 
-// Completes the OAuth redirect even though this page never imports `signInWithRedirect`.
-import "aws-amplify/auth/enable-oauth-listener";
-import { fetchAuthSession } from "aws-amplify/auth";
-import { Hub } from "aws-amplify/utils";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { LogoMark } from "@/components/icons";
 import { Skeleton } from "@/components/ui/skeleton";
-import { configureAmplify } from "@/lib/auth/amplify-config";
 import { signInErrorCode } from "@/lib/auth/sign-in-error";
+import { authClient } from "@/lib/platform/auth";
 
 /**
- * Where Cognito returns after Google (T048). Success goes to `/browse/`; a refused account goes to
+ * Where the broker returns after Google (T048). Success goes to `/browse/`; a refused account goes to
  * `/?error=domain`, and any other failure to `/?error=signin`.
  */
 export function AuthCallback() {
@@ -26,7 +22,8 @@ export function AuthCallback() {
       router.replace(path);
     };
 
-    // Cognito reports a trigger rejection in the query string; read it before Amplify cleans up the URL.
+    // OAuth reports errors in the query string (Cognito puts a trigger's rejection there); read it
+    // before the adapter cleans up the URL.
     const params = new URLSearchParams(window.location.search);
     const urlError = params.get("error_description") ?? params.get("error");
     if (urlError) {
@@ -34,22 +31,11 @@ export function AuthCallback() {
       return;
     }
 
-    // This effect runs before AuthProvider's (children first), so the listener is attached before
-    // configureAmplify() starts the code exchange.
-    const stop = Hub.listen("auth", ({ payload }) => {
-      if (payload.event === "signInWithRedirect") finish("/browse/");
-      else if (payload.event === "signInWithRedirect_failure") {
-        finish(`/?error=${signInErrorCode(payload.data?.error?.message)}`);
-      }
-    });
-    configureAmplify();
-    // fetchAuthSession() waits for an in-flight redirect, so it settles the outcome even if the Hub
-    // event fired first.
-    fetchAuthSession().then(
-      ({ tokens }) => finish(tokens ? "/browse/" : "/?error=signin"),
-      () => finish("/?error=signin"),
+    // This effect runs before AuthProvider's (children first), so the adapter is listening before
+    // anything starts the code exchange.
+    return authClient().completeSignIn((result) =>
+      finish(result.ok ? "/browse/" : `/?error=${signInErrorCode(result.message)}`),
     );
-    return stop;
   }, [router]);
 
   return (

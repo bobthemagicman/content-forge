@@ -68,6 +68,9 @@ amplify_outputs*
 # ...except the fake-environment fixture CI and the beta preview build against (T041)
 !tests/e2e/fixtures/amplify_outputs.e2e.json
 amplifyconfiguration*
+# provider-neutral web config, generated per deployment (T132) ...except its E2E twin
+platform-config*.json
+!tests/e2e/fixtures/platform-config.e2e.json
 
 # aws cdk (infra/edge-cert and any other CDK app)
 cdk.out/
