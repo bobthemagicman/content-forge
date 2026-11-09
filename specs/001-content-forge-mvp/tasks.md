@@ -583,7 +583,7 @@ without a session are denied (quickstart V1–V4, V12).
       rejected with `401` (SC-002);
     - a signed-in POST of a `createContent` mutation is rejected, because the operation doesn't
       exist (FR-040).
-- [ ] T054 [US1] (owner) Deploy to `master`, then:
+- [x] T054 [US1] (owner) Deploy to `master`, then:
   - **verify R3**: first-time Google sign-in works with `allowAdminCreateUserOnly: true`. If it
     doesn't, remove the override in `amplify/backend.ts`;
   - set the Google OAuth redirect URI to the Cognito domain's `/oauth2/idpresponse`;
@@ -594,6 +594,28 @@ without a session are denied (quickstart V1–V4, V12).
   - run quickstart V1–V4 and V12, and record the R3 outcome in
     `specs/001-content-forge-mvp/research.md`.
   - **Sandbox run (2026-11-07):** the first personal sandbox deployed (after making reserved concurrency production-only). A Workspace account's first Google sign-in created the user with `custom:hd` set, so R3's `allowAdminCreateUserOnly` question is answered for sandboxes. `/_session` with that user's ID token returned `204` and a 12-hour `X-Session-Expires`. Still to do on `master`: everything above.
+  - **Production run (2026-11-08/09)**, with the app in the app account and the `prod` pool in the
+    auth account (T130):
+    - **R3:** a Workspace account's first Google sign-in on `master` created the user with
+      `custom:hd` set, so admin-only creation stays: `selfSignUpEnabled: false` (Cognito's
+      `AllowAdminCreateUserOnly`) in `infra/auth/lib/auth-stack.ts`.
+    - **Redirect URI:** added for the `prod` pool. Until it was, Google answered
+      `redirect_uri_mismatch` (now a note in quickstart §2 step 4).
+    - **Log retention:** every content-forge log group in production, the sandbox, and the auth
+      account has `retentionInDays: 14`.
+    - **Cost tag:** the Amplify app is tagged and `project` is active as a cost allocation tag.
+    - **V1:** the landing page is the only thing served signed out; E2E checks it makes no AppSync
+      or asset requests.
+    - **V2:** the sign-in access token and a refreshed one both carry only `openid profile email`,
+      and `UpdateUserAttributes` refuses both with `NotAuthorizedException`. `custom:hd` is set.
+    - **V3:** a personal Gmail account stopped at Google's "only within its organization" page,
+      and no user was created.
+    - **V4:** signed out, `assets.` returns `403` for `/v/` assets and every other path,
+      `/_session` without a token returns `401`, and AppSync returns `401` with no token or an
+      `alg: none` token. Replaying an expired download URL waits for US3.
+    - **V12:** after sign-out, `/browse/` goes back to `/`.
+    - Also checked: the custom domain and its certificate, HTTP → HTTPS, the 404 page, the CSP and
+      other security headers, and the asset host's CORS preflight from the app origin.
 
 **Checkpoint**: US1 works on its own. Only allowed accounts get in, and nothing in the catalog is
 exposed.
