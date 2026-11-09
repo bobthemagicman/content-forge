@@ -464,6 +464,13 @@ they're the first tasks of implementation.
 No item is estimated above $1/month except S3 storage, which the spec accepts ("excluding file
 storage", SC-008). *Verify figures against current AWS pricing before launch.*
 
+**What the budget counts (2026-11-08).** The app account may run other things, so the
+`content-forge-monthly` budget counts only spending tagged `project=content-forge`. The backend
+tags every resource it creates (`amplify/backend.ts`, sandboxes included), and the owner tags the
+Amplify Hosting app. The tag must be activated as a cost allocation tag once (quickstart §2), or
+the budget sees nothing. The auth account's lines (Cognito, the Google secret) are outside it:
+that account has its own bill.
+
 ## R18. Content-Security-Policy for a static export
 
 - **Decision**: `amplify.yml` `customHeaders` sends this policy on every page of the production app:

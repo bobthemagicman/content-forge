@@ -14,6 +14,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 import { fileURLToPath } from "node:url";
+import { COST_TAG } from "../../config";
 
 export interface AssetsCdnProps {
   /** `master`, or `sandbox-<username>` (research R19). Namespaces the SSM parameters. */
@@ -338,7 +339,9 @@ export class AssetsCdn extends Construct {
       removalPolicy: production ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
     });
 
-    // --- Budget (account-wide, so production only) --------------------------------------------
+    // --- Budget (production only) -------------------------------------------------------------
+    // Counts only spending tagged with COST_TAG (backend.ts tags every resource), because the app
+    // account may run other things. Sandboxes carry the tag too, so their costs count.
     if (production) {
       new budgets.CfnBudget(this, "MonthlyBudget", {
         budget: {
@@ -346,6 +349,7 @@ export class AssetsCdn extends Construct {
           budgetType: "COST",
           timeUnit: "MONTHLY",
           budgetLimit: { amount: 5, unit: "USD" },
+          costFilters: { TagKeyValue: [`user:${COST_TAG.key}$${COST_TAG.value}`] },
         },
         notificationsWithSubscribers: [80, 100].map((threshold) => ({
           notification: {

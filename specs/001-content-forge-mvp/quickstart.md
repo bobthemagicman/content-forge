@@ -17,12 +17,12 @@ This guide covers how to set up, run, and **prove** the MVP works. Design detail
 | Google Workspace admin access | Can create an **Internal** OAuth client in Google Cloud Console |
 | Ingest tools (owner machine) | `ffmpeg -version`, `soffice --version`, `pdftoppm -v`. Install the missing ones: `brew install --cask libreoffice` and `brew install poppler` |
 | Playwright browsers | `npx playwright install chromium firefox webkit` |
-| Licensed Aeonik files (`Aeonik-Regular.woff2`, `.woff`) | Placed in `src/app/fonts/` on your machine. Git ignores them: the license doesn't allow publishing them in this public repo (see §2, step 5) |
+| Licensed Aeonik files (`Aeonik-Regular.woff2`, `.woff`) | Placed in `src/app/fonts/` on your machine. Git ignores them: the license doesn't allow publishing them in this public repo (see §2, step 6) |
 | Logo SVG | Placed in `public/brand/` |
 
 ## 2. One-time bootstrap (documented exceptions to "everything as code")
 
-Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the auth account.
+Steps 1, 2, 4, 5 and 6 run in the app account; step 3 is in Google Cloud and the auth account.
 
 0. **Lambda concurrency quota** (app account): production reserves 5 concurrent executions for the session
    function, and Lambda keeps 10 unreserved, so the account needs a quota of at least 15. New
@@ -83,7 +83,16 @@ Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the au
    committed ones without changing anything (exit 1 on drift, for example after a console edit).
 
    Confirm the platform/framework setting from research R2.
-5. **Licensed fonts**: upload `Aeonik-Regular.woff2` and `Aeonik-Regular.woff` to a private S3
+5. **Cost allocation tag** (app account; the management account instead, if the app account is in an
+   AWS Organization): the budget counts only resources tagged `project=content-forge` (research
+   R17).
+   - Tag the Amplify app, so hosting costs count:
+     `aws amplify tag-resource --resource-arn <app ARN> --tags project=content-forge --profile <p>`.
+   - After the first `master` deploy, wait for the tag to show up under **Billing → Cost allocation
+     tags** (up to 24 hours), then activate it there, or with
+     `aws ce update-cost-allocation-tags-status --cost-allocation-tags-status TagKey=project,Status=Active --profile <p>`.
+     Until then the budget sees nothing.
+6. **Licensed fonts**: upload `Aeonik-Regular.woff2` and `Aeonik-Regular.woff` to a private S3
    prefix you control (for example `s3://<private-bucket>/content-forge/fonts/`; block public
    access). Set the Amplify env var `FONTS_S3_URI` to that prefix and give the Amplify service
    role `s3:GetObject` on it. The Amplify build copies them into `src/app/fonts/` (T026). Never

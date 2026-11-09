@@ -12,6 +12,13 @@ export const APP_ORIGIN = (process.env.APP_ORIGIN ?? "https://content.example.co
  */
 export const GOOGLE_PROVIDER_NAME = "GoogleWorkspace";
 
+/**
+ * The cost allocation tag on every resource this backend creates. The budget counts only spending
+ * with this tag, because the app account may run other things (research R17). Activate it once
+ * under Billing → Cost allocation tags (quickstart §2), or the budget sees nothing.
+ */
+export const COST_TAG = { key: "project", value: "content-forge" } as const;
+
 /** Where `next dev` runs in a personal sandbox (research R19). */
 export const LOCAL_ORIGIN = "http://localhost:3000";
 
