@@ -354,7 +354,7 @@ that every story needs
 
   Research R2, R18.
   - **Done, with one change:** the response headers and the 404 rewrite aren't in `amplify.yml`. Amplify has deprecated `customHeaders` there, and the CSP must name the real asset host, which stays out of this public repo. `scripts/hosting/apply-settings.sh` builds the R18 headers from `ASSETS_DOMAIN` (`scripts/hosting/custom-headers.mjs`, unit-tested against R18) and applies them with `aws amplify update-app`, like the beta deploy. The cache holds `.npm/` rather than `node_modules/`, which `npm ci` replaces anyway.
-- [ ] T027 (owner) Run the one-time bootstrap from [quickstart.md](./quickstart.md#2-one-time-bootstrap-documented-exceptions-to-everything-as-code):
+- [x] T027 (owner) Run the one-time bootstrap from [quickstart.md](./quickstart.md#2-one-time-bootstrap-documented-exceptions-to-everything-as-code):
   1. deploy `infra/edge-cert`;
   2. run `scripts/bootstrap/create-signing-keys.sh --env master`, which puts both keys in SSM;
   3. create the Internal Google OAuth client, store it with `scripts/auth/set-google-secret.sh`, and
@@ -368,6 +368,13 @@ that every story needs
   Then deploy the skeleton and **verify R2**: does platform `WEB` with `out/` serve correctly, or
   is the "Web" framework override needed? Record the outcome in
   `specs/001-content-forge-mvp/research.md` (R2).
+  - **Done 2026-11-08.** Production runs in the app account, with sign-in through the `prod` pool
+    in the auth account. What the run turned up, now in quickstart §2:
+    - the domain's live DNS wasn't Route 53, so `assets.<domain>` is a delegated zone (step 1);
+    - CDK needed bootstrapping in `us-east-1`, with the app's `-c` settings (step 1);
+    - the fonts copy needs `s3:ListBucket` as well as `GetObject` (steps 4.1 and 6);
+    - R2: `WEB` plus the "Web" framework; the console's default `WEB_COMPUTE` build failed (step 4.3);
+    - the custom domain goes through the CLI when the DNS is elsewhere (step 4.4).
 
 ### Front-end foundation
 

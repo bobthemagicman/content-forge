@@ -30,8 +30,28 @@ Steps 1, 2, 4, 5 and 6 run in the app account; step 3 is in Google Cloud and the
    `us-west-2`, and request 1000 (the usual default) if it's lower. Increases are free and usually
    approved within a day.
 
-1. **Edge certificate**: `cd infra/edge-cert && npm ci && npx cdk deploy -c assetsDomain=assets.<domain>
-   -c hostedZoneId=<zone id> --profile <p>`. Note the output `AssetsCertArn`.
+1. **DNS and the edge certificate.** The asset host `assets.<domain>` needs a Route 53 zone in the
+   app account, because the backend writes its alias record there.
+   - **Check which DNS is live first.** `dig NS <domain> +short` names the servers the internet
+     actually asks. A Route 53 zone that isn't listed there is never consulted, so a certificate
+     validated in it waits until the deploy times out.
+   - **If the domain's live DNS is a Route 53 zone in the app account,** use that zone.
+   - **Otherwise** (another registrar's DNS, or a zone in another account), delegate just the asset
+     host. Create a zone named `assets.<domain>` in the app account
+     (`aws route53 create-hosted-zone --name assets.<domain> --caller-reference <unique> --profile <p>`),
+     then add its four name servers as `NS` records named `assets` at the parent's DNS. Once
+     `dig NS assets.<domain> +short` lists them, set `HOSTED_ZONE_NAME=assets.<domain>` wherever a
+     step asks for the zone. The zone costs $0.50 a month (research R17).
+   - Bootstrap CDK in `us-east-1`, where CloudFront certificates live. Pass the same `-c` settings,
+     because `cdk bootstrap` builds the app it runs in:
+
+     ```bash
+     cd infra/edge-cert && npm ci
+     npx cdk bootstrap aws://<app account>/us-east-1 -c assetsDomain=assets.<domain> -c hostedZoneId=<zone id> --profile <p>
+     npx cdk deploy -c assetsDomain=assets.<domain> -c hostedZoneId=<zone id> [-c hostedZoneName=assets.<domain>] --profile <p>
+     ```
+
+     Note the output `AssetsCertArn`. Validation takes a few minutes once the zone is live.
 2. **Signing keys**: `scripts/bootstrap/create-signing-keys.sh --env master --profile <p>`.
    - It writes the private key to SSM `/content-forge/master/cloudfront/private-key` (SecureString).
    - It writes the public key to SSM `/content-forge/master/cloudfront/public-key`, where synth
@@ -61,20 +81,51 @@ Steps 1, 2, 4, 5 and 6 run in the app account; step 3 is in Google Cloud and the
 
    Rerun step 3 when the pool settings change, or the Google secret (then redeploy both pools).
    Then redeploy the app (or restart sandboxes) if the handover changed.
-4. **Amplify app** (app account): connect the GitHub repo `bobthemagicman/content-forge` in
-   `us-west-2`. Set:
-   - env vars `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget
-     alert goes);
-   - env vars `APP_ORIGIN` (`https://content.<domain>`) and `ASSETS_DOMAIN` (`assets.<domain>`;
-     set `HOSTED_ZONE_NAME` too if the zone isn't its parent domain). Production refuses to synth
-     without them. The allowed email domain comes from the `prod` pool's settings (step 3), not an
-     env var;
-   - env `NEXT_PUBLIC_DEMO_MODE=0`, so the front end uses Cognito instead of the beta preview's
-     simulated sign-in;
-   - on the Amplify service role, `ssm:GetParameter` on
-     `arn:aws:ssm:<region>:<app account>:parameter/content-forge/*`. Synth reads the pool handover
-     and the signing public key from there (research R22);
-   - the custom domain `content.example.com` → branch `master`.
+4. **Amplify app** (app account, `us-west-2`).
+   1. **Service role**, created before the app so the first build has what it needs. Trust
+      `amplify.amazonaws.com`, attach the managed policy
+      `arn:aws:iam::aws:policy/service-role/AmplifyBackendDeployFullAccess`, and add an inline
+      policy with:
+      - `ssm:GetParameter` on `arn:aws:ssm:<region>:<app account>:parameter/content-forge/*`. Synth
+        reads the pool handover and the signing public key there (research R22);
+      - `s3:GetObject` on the fonts prefix, and `s3:ListBucket` on its bucket, limited with an
+        `s3:prefix` condition. `aws s3 cp --recursive` lists before it copies (step 6).
+
+      Write the policy JSON to a file and pass it as `file://`. Long JSON pasted from a chat or a web
+      page can pick up line breaks inside its strings, which IAM rejects as a syntax error.
+   2. **Connect the repo** `bobthemagicman/content-forge`, branch `master`, choose that role, and set
+      these env vars **before** the first build:
+      - `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget alert
+        goes);
+      - `APP_ORIGIN` (`https://content.<domain>`) and `ASSETS_DOMAIN` (`assets.<domain>`; set
+        `HOSTED_ZONE_NAME` too if the zone isn't its parent domain, step 1). Production refuses to
+        synth without them. The allowed email domain comes from the `prod` pool's settings (step 3),
+        not an env var;
+      - `NEXT_PUBLIC_DEMO_MODE=0`, so the front end uses Cognito instead of the beta preview's
+        simulated sign-in;
+      - `FONTS_S3_URI` (step 6).
+   3. **Platform and framework** (research R2). The console detects Next.js and picks `WEB_COMPUTE`
+      with the framework "Next.js - SSR"; on the first production setup, that build failed. Switch
+      both, then start a new build once the first one ends:
+
+      ```bash
+      aws amplify update-app --app-id <id> --platform WEB --profile <p>
+      aws amplify update-branch --app-id <id> --branch-name master --framework Web --profile <p>
+      aws amplify start-job --app-id <id> --branch-name master --job-type RELEASE --profile <p>
+      ```
+
+   4. **Custom domain** `content.<domain>` → branch `master`. If the domain's DNS isn't a Route 53
+      zone in this account, use the CLI: the console also maps the root domain and `www`, and writes
+      to any Route 53 zone it finds for the domain, live or not.
+
+      ```bash
+      aws amplify create-domain-association --app-id <id> --domain-name <domain> --sub-domain-settings prefix=content,branchName=master --profile <p>
+      aws amplify get-domain-association --app-id <id> --domain-name <domain> --profile <p> \
+        --query "domainAssociation.[domainStatus, certificateVerificationDNSRecord, subDomains[0].dnsRecord]"
+      ```
+
+      Add both records it prints (the certificate validation CNAME and `content CNAME
+      <id>.cloudfront.net`) at the domain's DNS, then wait for `AVAILABLE` (about 30 minutes).
 
    Then apply the response headers (CSP, HSTS, ...) and the 404 rewrite, which name the asset host
    and so aren't committed: `ASSETS_DOMAIN=assets.<domain> scripts/hosting/apply-settings.sh
@@ -82,7 +133,8 @@ Steps 1, 2, 4, 5 and 6 run in the app account; step 3 is in Google Cloud and the
    asset host, and nothing else updates it. Add `--check` to compare the app's settings with the
    committed ones without changing anything (exit 1 on drift, for example after a console edit).
 
-   Confirm the platform/framework setting from research R2.
+   Add the `prod` pool's redirect URI (step 3.4) to the Google client before the first production
+   sign-in, or Google answers `redirect_uri_mismatch`.
 5. **Cost allocation tag** (app account; the management account instead, if the app account is in an
    AWS Organization): the budget counts only resources tagged `project=content-forge` (research
    R17).
@@ -95,8 +147,8 @@ Steps 1, 2, 4, 5 and 6 run in the app account; step 3 is in Google Cloud and the
 6. **Licensed fonts**: upload `Aeonik-Regular.woff2` and `Aeonik-Regular.woff` to a private S3
    prefix you control (for example `s3://<private-bucket>/content-forge/fonts/`; block public
    access). Set the Amplify env var `FONTS_S3_URI` to that prefix and give the Amplify service
-   role `s3:GetObject` on it. The Amplify build copies them into `src/app/fonts/` (T026). Never
-   commit them.
+   role `s3:GetObject` on it and `s3:ListBucket` on its bucket (step 4.1). The Amplify build
+   copies them into `src/app/fonts/` (T026). Never commit them.
 
 ## 3. Local development
 
