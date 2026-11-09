@@ -26,6 +26,7 @@ const POOL = {
   userPoolClientId: "testclient0000000000000000",
   domain: "content-forge-dev-0123456789.auth.us-west-2.amazoncognito.com",
   appOrigin: "http://localhost:3000",
+  allowedEmailDomain: "workspace.example.org",
 };
 
 type Resource = { Type: string; Properties: Record<string, unknown> };
@@ -57,6 +58,8 @@ function synth(env: Record<string, string>) {
           "amplify-backend-name": "vitest",
           "amplify-backend-type": "sandbox",
         }),
+        // Set only to test the stale-variable check, never inherited from the shell.
+        ALLOWED_EMAIL_DOMAIN: "",
         ...env,
       },
     },
@@ -113,6 +116,7 @@ describe("backend auth (research R21)", () => {
     expect((sessionFunction?.Properties.Environment as { Variables: Record<string, unknown> }).Variables).toMatchObject({
       USER_POOL_ID: POOL.userPoolId,
       USER_POOL_CLIENT_ID: POOL.userPoolClientId,
+      ALLOW_DOMAIN: POOL.allowedEmailDomain,
     });
   });
 
@@ -130,6 +134,12 @@ describe("backend auth (research R21)", () => {
     const run = synth({ CONTENT_FORGE_PARAMETERS_DIR: parameters, CDK_OUTDIR: join(outDir, "cdk.out.wrong") });
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain("redirects to https://content.example.com");
+  }, 60_000);
+
+  it("refuses a leftover ALLOWED_EMAIL_DOMAIN that disagrees with the pool", () => {
+    const run = synth({ ALLOWED_EMAIL_DOMAIN: "example.com", CDK_OUTDIR: join(outDir, "cdk.out.stale-domain") });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain("ALLOWED_EMAIL_DOMAIN is set, but the dev user pool allows a different domain");
   }, 60_000);
 
   it("stops with the bootstrap command when this deployment has no signing key", () => {

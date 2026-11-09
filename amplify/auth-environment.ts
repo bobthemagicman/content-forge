@@ -15,6 +15,11 @@ export interface AuthEnvironment {
   domain: string;
   /** The only origin the app client may redirect to. */
   appOrigin: string;
+  /**
+   * The Google Workspace domain whose accounts may sign in (FR-001): the one the pool's pre-sign-up
+   * trigger allows, so the session function can't drift from it.
+   */
+  allowedEmailDomain: string;
   /** The pool's token issuer, which AppSync's OIDC mode trusts. */
   issuerUrl: string;
 }
@@ -30,6 +35,7 @@ const PATTERNS: Record<Exclude<keyof AuthEnvironment, "issuerUrl">, RegExp> = {
   userPoolClientId: /^[a-z0-9]{1,128}$/,
   domain: /^[a-z0-9-]+\.auth\.[a-z]{2}(-[a-z]+)+-\d\.amazoncognito\.com$/,
   appOrigin: /^https?:\/\/[^/]+$/,
+  allowedEmailDomain: /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/,
 };
 
 /** Checks the handover JSON and derives the token issuer. `source` names it in errors. */
@@ -43,20 +49,24 @@ export function parseAuthEnvironment(json: string, source: string): AuthEnvironm
   for (const [key, pattern] of Object.entries(PATTERNS)) {
     const value = raw[key];
     if (typeof value !== "string" || !pattern.test(value)) {
-      throw new Error(`${source}: "${key}" is missing or malformed.`);
+      throw new Error(
+        `${source}: "${key}" is missing or malformed. If the pool was deployed by an older ` +
+          `scripts/auth/deploy.sh, run it again to refresh the parameter.`,
+      );
     }
   }
   const env = raw as unknown as Omit<AuthEnvironment, "issuerUrl">;
   if (!env.userPoolId.startsWith(`${env.region}_`)) {
     throw new Error(`${source}: userPoolId isn't in region ${env.region}.`);
   }
-  const { region, userPoolId, userPoolClientId, domain, appOrigin } = env;
+  const { region, userPoolId, userPoolClientId, domain, appOrigin, allowedEmailDomain } = env;
   return {
     region,
     userPoolId,
     userPoolClientId,
     domain,
     appOrigin,
+    allowedEmailDomain,
     issuerUrl: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
   };
 }

@@ -1,5 +1,5 @@
 import { defineBackend } from "@aws-amplify/backend";
-import { ALLOWED_EMAIL_DOMAIN, APP_ORIGIN, ASSETS_DOMAIN, HOSTED_ZONE_NAME, LOCAL_ORIGIN } from "./config";
+import { APP_ORIGIN, ASSETS_DOMAIN, HOSTED_ZONE_NAME, LOCAL_ORIGIN } from "./config";
 import { AssetsCdn } from "./custom/assets-cdn/construct";
 import { data } from "./data/resource";
 import { authEnvironment, envName, isProduction } from "./deployment";
@@ -27,7 +27,8 @@ const assets = new AssetsCdn(backend.createStack("assets"), "AssetsCdn", {
   userPoolId: authEnvironment.userPoolId,
   userPoolClientId: authEnvironment.userPoolClientId,
   allowedOrigins: [isProduction ? APP_ORIGIN : LOCAL_ORIGIN],
-  allowedEmailDomain: ALLOWED_EMAIL_DOMAIN,
+  // The pool's own domain, so the session function and the pre-sign-up trigger always agree.
+  allowedEmailDomain: authEnvironment.allowedEmailDomain,
   contentTable: backend.data.resources.tables["Content"],
   ...(isProduction && {
     assetsDomain: ASSETS_DOMAIN,

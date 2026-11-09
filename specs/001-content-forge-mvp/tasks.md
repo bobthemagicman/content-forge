@@ -1114,7 +1114,7 @@ download increases the item's displayed count by one.
   `specs/001-content-forge-mvp/research.md`, check every checkbox in this file, and open the PR from
   `001-content-forge-mvp` to `master` linking issue #1, with a per-principle compliance note
   (constitution: Development Workflow).
-- [ ] T130 Move the user pool to a separate auth account (research R21):
+- [x] T130 Move the user pool to a separate auth account (research R21):
   - `infra/auth`, a standalone CDK app with a `dev` pool (localhost, every sandbox) and a `prod`
     pool, each with the Google OIDC provider, the refresh-only app client, the domain and the
     pre-sign-up trigger, which moves from `amplify/auth/` unchanged;
@@ -1123,8 +1123,10 @@ download increases the item's displayed count by one.
     deployment's settings in the repo);
   - the app's backend drops `defineAuth` and reads the handover at synth (`amplify/parameters.ts`);
     AppSync switches to OIDC mode with the pool as issuer, the session function verifies against
-    the handover's pool, and `backend.addOutput` writes the `auth` section of
-    `amplify_outputs.json`;
+    the handover's pool and allows its email domain, and `backend.addOutput` writes the `auth`
+    section of `amplify_outputs.json`. The domain is in the handover rather than an
+    `ALLOWED_EMAIL_DOMAIN` variable: a sandbox deployed without the variable fell back to
+    `example.com` and refused every real user;
   - the CloudFront public keys move to SSM too (T012, T025), and the committed sandbox key is
     deleted;
   - tests: `tests/infra/auth-stack.test.ts` takes over the app client checks;
@@ -1134,6 +1136,14 @@ download increases the item's displayed count by one.
   - **verify on a sandbox** in the app account: Google sign-in through the `dev` pool, catalog
     queries through AppSync's OIDC mode (including after a token refresh), `/_session`, and
     quickstart V2 and V3.
+  - **Verified 2026-11-08** on a sandbox in the app account, with the `dev` pool in the auth
+    account:
+    - Google sign-in round trip;
+    - AppSync: `401` with no token, and an empty list with an access token and with a refreshed one;
+    - `/_session`: `204` and `X-Session-Expires` 12 hours ahead for an ID token, with the domain
+      from the handover; `401` for an access token and for none;
+    - V2: no `aws.cognito.signin.user.admin` scope, both attribute writes refused, `custom:hd` set;
+    - V3: a personal Gmail account stopped by Google, and no new user in the pool.
 - [ ] T128 Retire the beta preview's stand-ins once the backend is live (US1–US3 complete):
   - point `src/lib/data/content.ts` at AppSync only and delete `src/lib/data/demo/`,
     `public/demo/`, and `scripts/demo/`;

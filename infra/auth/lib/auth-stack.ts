@@ -129,6 +129,7 @@ export class AuthStack extends Stack {
     new CfnOutput(this, "UserPoolClientId", { value: this.client.userPoolClientId });
     new CfnOutput(this, "Domain", { value: `${domainPrefix}.auth.${this.region}.amazoncognito.com` });
     new CfnOutput(this, "AppOrigin", { value: props.appOrigin });
+    new CfnOutput(this, "AllowedEmailDomain", { value: props.allowedEmailDomain });
     new CfnOutput(this, "GoogleRedirectUri", {
       value: `https://${domainPrefix}.auth.${this.region}.amazoncognito.com/oauth2/idpresponse`,
       description: "Add to the Google OAuth client's authorized redirect URIs",

@@ -12,7 +12,7 @@ export const isProduction = envName === "master";
 // The domain settings default to `example.com` placeholders so the real domain stays out of this
 // repo. Production must set them: a placeholder deploy would fail closed, but confusingly.
 if (isProduction) {
-  const missing = ["ALLOWED_EMAIL_DOMAIN", "APP_ORIGIN", "ASSETS_DOMAIN"].filter((name) => !process.env[name]);
+  const missing = ["APP_ORIGIN", "ASSETS_DOMAIN"].filter((name) => !process.env[name]);
   if (missing.length) {
     throw new Error(`Production needs ${missing.join(", ")} set on the Amplify app (quickstart §2).`);
   }
@@ -28,5 +28,16 @@ if (authEnvironment.appOrigin !== expectedOrigin) {
   throw new Error(
     `The ${authEnvFor(envName)} user pool redirects to ${authEnvironment.appOrigin}, but this deployment ` +
       `serves ${expectedOrigin}. Redeploy the pool with the right APP_ORIGIN, or check that this deployment reads its own account's SSM (quickstart §2).`,
+  );
+}
+
+// The allowed email domain comes from the pool's settings (its pre-sign-up trigger's domain). The
+// ALLOWED_EMAIL_DOMAIN variable is only read by scripts/auth/deploy.sh now; a leftover one that
+// disagrees would be a silent misconfiguration, so stop.
+const legacyDomain = process.env.ALLOWED_EMAIL_DOMAIN?.toLowerCase();
+if (legacyDomain && legacyDomain !== authEnvironment.allowedEmailDomain) {
+  throw new Error(
+    `ALLOWED_EMAIL_DOMAIN is set, but the ${authEnvFor(envName)} user pool allows a different domain. ` +
+      `The backend uses the pool's domain: unset ALLOWED_EMAIL_DOMAIN, or redeploy the pool with scripts/auth/deploy.sh.`,
   );
 }

@@ -97,6 +97,10 @@ describe.each([
     template.hasResourceProperties("AWS::Logs::LogGroup", { RetentionInDays: 14 });
   });
 
+  it("outputs that domain, so the app's session function allows the same one", () => {
+    template.hasOutput("AllowedEmailDomain", { Value: "example.com" });
+  });
+
   it("uses a Cognito domain that doesn't contain the account ID", () => {
     const domain = Object.values(template.findResources("AWS::Cognito::UserPoolDomain"))[0].Properties.Domain as string;
     expect(domain).toMatch(/^content-forge-(dev|prod)-[0-9a-f]{10}$/);

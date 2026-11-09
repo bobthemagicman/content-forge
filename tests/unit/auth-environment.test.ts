@@ -19,6 +19,7 @@ const POOL = {
   userPoolClientId: "1a2b3c4d5e6f7g8h9i0j1k2l3m",
   domain: "content-forge-dev-0123456789.auth.us-west-2.amazoncognito.com",
   appOrigin: "http://localhost:3000",
+  allowedEmailDomain: "example.com",
 };
 const ISSUER = "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_AbC123xyz";
 
@@ -61,10 +62,19 @@ describe("auth environment handover (research R21)", () => {
     ["domain", "evil.example.com"],
     ["appOrigin", "http://localhost:3000/path"],
     ["region", undefined],
+    ["allowedEmailDomain", undefined],
+    ["allowedEmailDomain", "Example.com"],
+    ["allowedEmailDomain", "@example.com"],
+    ["allowedEmailDomain", "localhost"],
   ])("refuses a malformed %s", (key, value) => {
     expect(() => parseAuthEnvironment(JSON.stringify({ ...POOL, [key]: value }), "test")).toThrow(
       `"${key}" is missing or malformed`,
     );
+  });
+
+  it("says how to refresh a parameter an older deploy.sh wrote", () => {
+    const older = JSON.stringify({ ...POOL, allowedEmailDomain: undefined });
+    expect(() => parseAuthEnvironment(older, "test")).toThrow(/run it again to refresh/);
   });
 
   it("refuses a pool from another region", () => {

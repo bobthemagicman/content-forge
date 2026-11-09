@@ -19,10 +19,10 @@ real domains and key material.
 | `region` | Where the app's resources go | No | The AWS profile, or `AWS_REGION` | The deployer |
 | `appOrigin` | The production web origin, `https://content.<domain>` | No | Amplify env var `APP_ORIGIN`. Sandboxes use `http://localhost:3000` | Owner, once |
 | `assetsDomain` | The production asset host, `assets.<domain>` | No | Amplify env vars `ASSETS_DOMAIN`, `HOSTED_ZONE_NAME` | Owner, once |
-| `allowedEmailDomain` | The Google Workspace domain whose accounts may sign in | No | Amplify env var `ALLOWED_EMAIL_DOMAIN`, and the auth stack's pre-sign-up trigger | Owner, once |
+| `allowedEmailDomain` | The Google Workspace domain whose accounts may sign in | No | Part of `identity` below: the auth stack's pre-sign-up trigger, and the session function reads it from the handover | `ALLOWED_EMAIL_DOMAIN=<domain> scripts/auth/deploy.sh` |
 | `budgetAlertEmail` | Where the monthly budget alert goes | No (personal data) | Amplify env var `BUDGET_ALERT_EMAIL` | Owner, once |
 | `identityProvider.client` | The Google OAuth client ID and secret | **Yes** | Secrets Manager `content-forge/google-oauth-client`, auth account | `scripts/auth/set-google-secret.sh` |
-| `identity` | The token issuer, client ID, sign-in domain and redirect origin the app trusts | No | SSM String `/content-forge/auth/<dev\|prod>`, app account (JSON) | `scripts/auth/deploy.sh` |
+| `identity` | The token issuer, client ID, sign-in domain, redirect origin and allowed email domain the app trusts | No | SSM String `/content-forge/auth/<dev\|prod>`, app account (JSON) | `scripts/auth/deploy.sh` |
 | `assetSigning.privateKey` | Signs asset cookies, download URLs and demo launch links | **Yes** | SSM SecureString `/content-forge/<env>/cloudfront/private-key` | `scripts/bootstrap/create-signing-keys.sh` |
 | `assetSigning.publicKey` | Verifies them | No | SSM String `/content-forge/<env>/cloudfront/public-key` | `scripts/bootstrap/create-signing-keys.sh` |
 | `fonts` | Where the licensed font files are kept | No | Amplify env var `FONTS_S3_URI` | Owner, once |

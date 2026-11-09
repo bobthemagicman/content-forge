@@ -50,7 +50,7 @@ PARAM="/content-forge/auth/${AUTH_ENV}"
 # Fail before deploying anything if either profile can't be used.
 for profile in "$AUTH_PROFILE" "$APP_PROFILE"; do
   aws sts get-caller-identity --profile "$profile" --query Account --output text >/dev/null ||
-    { echo "Profile $profile has no valid credentials (aws sso login --profile $profile?)." >&2; exit 1; }
+    { echo "Profile $profile has no valid credentials (expired SSO session? aws sso login --profile $profile)." >&2; exit 1; }
 done
 
 if ! aws secretsmanager describe-secret --profile "$AUTH_PROFILE" --region "$REGION" \
@@ -79,6 +79,7 @@ STACK="$STACK" node -e '
     userPoolClientId: out.UserPoolClientId,
     domain: out.Domain,
     appOrigin: out.AppOrigin,
+    allowedEmailDomain: out.AllowedEmailDomain,
   };
   fs.writeFileSync(process.argv[2], JSON.stringify(handover));
   fs.writeFileSync(process.argv[3], out.GoogleRedirectUri);

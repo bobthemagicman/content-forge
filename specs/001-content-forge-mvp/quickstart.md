@@ -50,8 +50,9 @@ Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the au
       ALLOWED_EMAIL_DOMAIN=<domain> APP_ORIGIN=https://content.<domain> scripts/auth/deploy.sh --env prod --auth-profile <auth p> --app-profile <app p>
       ```
 
-      Each writes the pool's IDs, domain and redirect origin to the app account's SSM
-      (`/content-forge/auth/<env>`), where synth reads them. Nothing is committed. Both default to
+      Each writes the pool's IDs, domain, redirect origin and allowed email domain to the app
+      account's SSM (`/content-forge/auth/<env>`), where synth reads them. The session function
+      takes the allowed domain from there, so it always matches the pool's pre-sign-up check. Nothing is committed. Both default to
       `us-west-2`; pass `--region` for the auth account and `--app-region` for the app account.
    4. Add each pool's redirect URI, which the deploy prints
       (`https://<cognito-domain>/oauth2/idpresponse`), to the Google client's authorized redirect
@@ -63,10 +64,10 @@ Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the au
    `us-west-2`. Set:
    - env vars `ASSETS_CERT_ARN`, `HOSTED_ZONE_ID`, and `BUDGET_ALERT_EMAIL` (where the $5 budget
      alert goes);
-   - env vars `ALLOWED_EMAIL_DOMAIN` (the Workspace domain allowed to sign in), `APP_ORIGIN`
-     (`https://content.<domain>`), and `ASSETS_DOMAIN` (`assets.<domain>`; set `HOSTED_ZONE_NAME`
-     too if the zone isn't its parent domain). They default to the `example.com` placeholders
-     (`amplify/config.ts`), so a deploy without them only admits `@example.com`;
+   - env vars `APP_ORIGIN` (`https://content.<domain>`) and `ASSETS_DOMAIN` (`assets.<domain>`;
+     set `HOSTED_ZONE_NAME` too if the zone isn't its parent domain). Production refuses to synth
+     without them. The allowed email domain comes from the `prod` pool's settings (step 3), not an
+     env var;
    - env `NEXT_PUBLIC_DEMO_MODE=0`, so the front end uses Cognito instead of the beta preview's
      simulated sign-in;
    - on the Amplify service role, `ssm:GetParameter` on
@@ -92,7 +93,7 @@ Steps 1, 2, 4 and 5 run in the app account; step 3 is in Google Cloud and the au
 ```bash
 npm ci
 scripts/bootstrap/create-signing-keys.sh --env sandbox-$(whoami) --profile <app p>   # once per sandbox
-ALLOWED_EMAIL_DOMAIN=<domain> npx ampx sandbox --profile <app p>   # writes amplify_outputs.json
+npx ampx sandbox --profile <app p>                                 # writes amplify_outputs.json
 NEXT_PUBLIC_DEMO_MODE=0 npm run dev                                # http://localhost:3000
 ```
 
