@@ -132,8 +132,8 @@ from `assetsBaseUrl` and never hard-code the host.
 
 - Call `/_session` after sign-in and before rendering any catalog image.
 - Re-call it when `X-Session-Expires` is less than 60 min away (checked on focus and every 15 min),
-  and once after the first asset load error. If the retry also fails, ask the user to sign in again
-  (FR-029).
+  and after an asset load error, at most once a minute. If that call fails, ask the user to sign in
+  again (FR-029).
 - Open demos through a launch link, never a built URL:
   1. In the click handler, synchronously open `const tab = window.open('', '_blank')`, so the
      browser doesn't treat it as a popup, and set `tab.opener = null`, so the demo can't navigate

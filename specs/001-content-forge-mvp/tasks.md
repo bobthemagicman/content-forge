@@ -437,8 +437,10 @@ that every story needs
     "Session expired, sign in again" banner (FR-029,
     [contracts/assets-cdn.md](./contracts/assets-cdn.md#client-obligations)).
   - **Done**, with these choices:
-    - asset errors that arrive while a renewal is running count as one failure, so a row of failed
-      thumbnails doesn't skip the retry;
+    - an asset error renews the cookies, at most once a minute, and `needsSignIn` is set only when
+      that renewal fails. An asset that fails with fresh cookies is that asset's problem, such as a
+      404, and showing "Session expired" for it would be wrong (PR review). Errors during or just
+      after a renewal count as the same failure, so a row of broken thumbnails sends one request;
     - a `401`, or no ID token, signs out;
     - any other failure of the first exchange shows a retry banner instead, because signing in
       again wouldn't fix a network error or a `403`;

@@ -15,6 +15,8 @@ import { ASSETS_BASE_URL, DEMO_MODE } from "@/lib/config";
 export const CHECK_INTERVAL_MS = 15 * 60_000;
 /** Renew when the cookies have less than this left. */
 export const RENEW_BEFORE_MS = 60 * 60_000;
+/** At most one renewal per this long because of asset errors, so a row of broken images can't flood `/_session`. */
+export const ERROR_RENEWAL_GAP_MS = 60_000;
 
 type Exchange = "ok" | "unauthorized" | "failed";
 type Status = "loading" | "ready" | "failed" | "needsSignIn";
@@ -23,8 +25,9 @@ interface AssetSession {
   /** True once the cookies can't be renewed: the layout shows `AssetSessionBanner`. */
   needsSignIn: boolean;
   /**
-   * Call when a catalog asset fails to load. The first call renews the cookies; a failure after that
-   * renewal means the session can't be saved, so it sets `needsSignIn`.
+   * Call when a catalog asset fails to load. It renews the cookies, at most once a minute, and sets
+   * `needsSignIn` only if that renewal fails. An asset that fails with fresh cookies is that asset's
+   * problem (a 404, say), not the session's.
    */
   reportAssetError: () => void;
   /** Ends the session and goes back to the landing page, where the user signs in again. */
@@ -51,8 +54,8 @@ function CookieSessionProvider({ children }: { children: React.ReactNode }) {
   const { idToken, signOut } = useSession();
   const [status, setStatus] = useState<Status>("loading");
   const expiresAt = useRef(0);
-  // Set by reportAssetError's renewal, cleared by the next scheduled one.
-  const retried = useRef(false);
+  // When reportAssetError last renewed the cookies.
+  const lastErrorRenewal = useRef(Number.NEGATIVE_INFINITY);
   const inFlight = useRef<Promise<Exchange> | null>(null);
 
   /** One `/_session` exchange; concurrent callers share it. A `401` signs the user out. */
@@ -106,8 +109,7 @@ function CookieSessionProvider({ children }: { children: React.ReactNode }) {
     const check = () => {
       if (inFlight.current || expiresAt.current - Date.now() >= RENEW_BEFORE_MS) return;
       void exchange().then((result) => {
-        if (result === "ok") retried.current = false;
-        else if (result === "failed" && Date.now() >= expiresAt.current) setStatus("needsSignIn");
+        if (result === "failed" && Date.now() >= expiresAt.current) setStatus("needsSignIn");
       });
     };
     const timer = setInterval(check, CHECK_INTERVAL_MS);
@@ -119,13 +121,9 @@ function CookieSessionProvider({ children }: { children: React.ReactNode }) {
   }, [status, exchange]);
 
   const reportAssetError = useCallback(() => {
-    // Errors while a renewal is running are the same failure; it decides.
-    if (inFlight.current) return;
-    if (retried.current) {
-      setStatus("needsSignIn");
-      return;
-    }
-    retried.current = true;
+    // Errors while a renewal is running, or just after one, are the same failure; it decides.
+    if (inFlight.current || Date.now() - lastErrorRenewal.current < ERROR_RENEWAL_GAP_MS) return;
+    lastErrorRenewal.current = Date.now();
     void exchange().then((result) => {
       if (result === "failed") setStatus("needsSignIn");
     });

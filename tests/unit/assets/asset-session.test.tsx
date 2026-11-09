@@ -4,6 +4,7 @@ import {
   AssetSessionBanner,
   AssetSessionProvider,
   CHECK_INTERVAL_MS,
+  ERROR_RENEWAL_GAP_MS,
   useAssetSession,
 } from "@/lib/assets/asset-session";
 import { type Session, SessionContext } from "@/lib/auth/session";
@@ -113,22 +114,23 @@ describe("AssetSessionProvider", () => {
     await vi.waitFor(() => expect(sessionCalls()).toHaveLength(2));
   });
 
-  it("renews once on an asset error, then asks the user to sign in again", async () => {
+  it("renews on an asset error, at most once a minute, and keeps the session when that works", async () => {
     fetchMock.mockResolvedValue(cookies(12 * 60));
     renderProvider();
     await screen.findByText("catalog");
 
     await act(async () => reportAssetError());
     expect(sessionCalls()).toHaveLength(2);
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
-    // The renewed cookies didn't help.
+    // Another broken image straight away: no second renewal, and no false "expired".
     await act(async () => reportAssetError());
     expect(sessionCalls()).toHaveLength(2);
-    expect(screen.getByRole("alert")).toHaveTextContent("Your session expired.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
-    expect(session.signOut).toHaveBeenCalledOnce();
+    // A minute on, an unrelated asset fails: renewed again, still no banner.
+    await act(async () => vi.advanceTimersByTime(ERROR_RENEWAL_GAP_MS));
+    await act(async () => reportAssetError());
+    expect(sessionCalls()).toHaveLength(3);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("asks the user to sign in again when that renewal fails", async () => {
@@ -140,6 +142,9 @@ describe("AssetSessionProvider", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Your session expired.");
     // The catalog stays on screen behind the banner.
     expect(screen.getByText("catalog")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    expect(session.signOut).toHaveBeenCalledOnce();
   });
 
   it("treats errors during a renewal as the same failure", async () => {
