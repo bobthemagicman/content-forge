@@ -128,6 +128,32 @@ describe("backend auth (research R21)", () => {
     }
   });
 
+  it("tags every resource for the budget's cost filter", () => {
+    const taggable = [
+      "AWS::DynamoDB::Table",
+      "AWS::Lambda::Function",
+      "AWS::S3::Bucket",
+      "AWS::AppSync::GraphQLApi",
+      "AWS::CloudFront::Distribution",
+    ];
+    const untagged: string[] = [];
+    for (const type of taggable) {
+      expect(resources(type).length, type).toBeGreaterThan(0);
+      for (const [file, template] of Object.entries(templates)) {
+        for (const [id, resource] of Object.entries(template.Resources ?? {})) {
+          // CDK's built-in custom resource handlers are raw resources that tags don't reach. They run
+          // only during deploys and deletes, so their cost is nil.
+          if (resource.Type !== type || /CustomResourceProviderHandler/.test(id)) continue;
+          // Most resources take a list of tags; a few take the same as a map.
+          const tags = resource.Properties.Tags as { Key: string; Value: string }[] | Record<string, string> | undefined;
+          const value = Array.isArray(tags) ? tags.find((t) => t.Key === "project")?.Value : tags?.project;
+          if (value !== "content-forge") untagged.push(`${file} ${id}`);
+        }
+      }
+    }
+    expect(untagged).toEqual([]);
+  });
+
   it("refuses a pool whose redirect origin doesn't match the deployment", () => {
     const parameters = join(outDir, "parameters-wrong-origin");
     putParameter(parameters, "/content-forge/auth/dev", JSON.stringify({ ...POOL, appOrigin: "https://content.example.com" }));

@@ -1,5 +1,6 @@
 import { defineBackend } from "@aws-amplify/backend";
-import { APP_ORIGIN, ASSETS_DOMAIN, HOSTED_ZONE_NAME, LOCAL_ORIGIN } from "./config";
+import { Tags } from "aws-cdk-lib";
+import { APP_ORIGIN, ASSETS_DOMAIN, COST_TAG, HOSTED_ZONE_NAME, LOCAL_ORIGIN } from "./config";
 import { AssetsCdn } from "./custom/assets-cdn/construct";
 import { data } from "./data/resource";
 import { authEnvironment, envName, isProduction } from "./deployment";
@@ -9,6 +10,9 @@ import { PARAMETERS, readDeploymentParameter } from "./parameters";
 // backend only trusts its tokens. The pool's settings (Google only, refresh-only client, no
 // self-service sign-up) are in infra/auth/lib/auth-stack.ts.
 const backend = defineBackend({ data });
+
+// Every stack and resource, so the budget can tell this app's costs from the rest of the account.
+Tags.of(backend.stack.node.root).add(COST_TAG.key, COST_TAG.value);
 
 // --- Asset plane (research R6–R8) -------------------------------------------------------------
 const publicKeyParameter = PARAMETERS.signingPublicKey(envName);

@@ -304,9 +304,15 @@ describe.each([
 describe("AssetsCdn production only", () => {
   const { template, assets } = synth(PRODUCTION);
 
-  it("creates the $5 monthly budget with 80% and 100% alerts", () => {
+  it("creates the $5 monthly budget with 80% and 100% alerts, counting only content-forge's tag", () => {
     template.hasResourceProperties("AWS::Budgets::Budget", {
-      Budget: { BudgetName: "content-forge-monthly", BudgetType: "COST", TimeUnit: "MONTHLY", BudgetLimit: { Amount: 5, Unit: "USD" } },
+      Budget: {
+        BudgetName: "content-forge-monthly",
+        BudgetType: "COST",
+        TimeUnit: "MONTHLY",
+        BudgetLimit: { Amount: 5, Unit: "USD" },
+        CostFilters: { TagKeyValue: ["user:project$content-forge"] },
+      },
       NotificationsWithSubscribers: [80, 100].map((threshold) => ({
         Notification: Match.objectLike({ Threshold: threshold, ThresholdType: "PERCENTAGE", NotificationType: "ACTUAL" }),
         Subscribers: [{ SubscriptionType: "EMAIL", Address: "alerts@example.com" }],

@@ -343,7 +343,7 @@ that every story needs
   - `backend.phases.build`: `nvm install 24 && nvm use 24`, `npm ci`,
     `npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID`;
   - `frontend.phases.preBuild`: `aws s3 cp "$FONTS_S3_URI" src/app/fonts/ --recursive` (the
-    licensed Aeonik files are git-ignored; quickstart §2, step 5);
+    licensed Aeonik files are git-ignored; quickstart §2, step 6);
   - `frontend.phases.build`: `npm run build`;
   - `artifacts.baseDirectory: out`;
   - `cache` for `node_modules`;
@@ -582,6 +582,8 @@ without a session are denied (quickstart V1–V4, V12).
   - set the Google OAuth redirect URI to the Cognito domain's `/oauth2/idpresponse`;
   - confirm with `aws logs describe-log-groups` that the log group of every Lambda in the stack has
     `retentionInDays: 14` (Principle I);
+  - tag the Amplify app and activate the `project` cost allocation tag (quickstart §2 step 5), so the
+    budget counts content-forge's spending and nothing else in the account;
   - run quickstart V1–V4 and V12, and record the R3 outcome in
     `specs/001-content-forge-mvp/research.md`.
   - **Sandbox run (2026-11-07):** the first personal sandbox deployed (after making reserved concurrency production-only). A Workspace account's first Google sign-in created the user with `custom:hd` set, so R3's `allowAdminCreateUserOnly` question is answered for sandboxes. `/_session` with that user's ID token returned `204` and a 12-hour `X-Session-Expires`. Still to do on `master`: everything above.
