@@ -158,7 +158,7 @@ describe("GET /_session", () => {
 
   it.each([
     ["another domain", { email: "ada@gmail.com" }],
-    ["a lookalike domain", { email: "ada@example.com.evil.com" }],
+    ["a lookalike domain", { email: "ada@example.com.other.test" }],
     ["a subdomain", { email: "ada@sub.example.com" }],
     ["no email", {}],
     ["an unverified email", { email: "ada@example.com", email_verified: "false" }],
@@ -209,7 +209,7 @@ describe("GET /_session", () => {
   it("rejects a disallowed origin with 403 and no CORS grant", async () => {
     const handler = await loadHandler();
     const result = await handler(
-      request("/_session", { headers: { origin: "https://evil.example.net", "x-id-token": "t" } }),
+      request("/_session", { headers: { origin: "https://other.example.net", "x-id-token": "t" } }),
     );
     expect(result.statusCode).toBe(403);
     expect(result.headers).not.toHaveProperty("Access-Control-Allow-Origin");
@@ -296,7 +296,7 @@ describe("OPTIONS preflight", () => {
 
   it("refuses a preflight from a disallowed origin", async () => {
     const handler = await loadHandler();
-    const result = await handler(request("/_session", { method: "OPTIONS", headers: { origin: "https://evil.example.net" } }));
+    const result = await handler(request("/_session", { method: "OPTIONS", headers: { origin: "https://other.example.net" } }));
     expect(result.statusCode).toBe(403);
   });
 });
@@ -385,7 +385,7 @@ describe("GET /_session/demo/<id>", () => {
     expect((await handler(request(demoPath))).statusCode).toBe(401);
     verify.mockResolvedValueOnce({ email: "eve@example.org", email_verified: true });
     expect((await handler(withToken(demoPath))).statusCode).toBe(403);
-    const elsewhere = request(demoPath, { headers: { origin: "https://evil.example", "x-id-token": "t" } });
+    const elsewhere = request(demoPath, { headers: { origin: "https://other.example", "x-id-token": "t" } });
     expect((await handler(elsewhere)).statusCode).toBe(403);
     expect(dynamodb.commandCalls(GetItemCommand)).toHaveLength(0);
   });

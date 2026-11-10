@@ -28,7 +28,7 @@ describe("pre-sign-up trigger", () => {
     await expect(run(e)).resolves.toBe(e);
   });
 
-  it.each(["user@gmail.com", "user@example.com.evil.com", "user@sub.example.com", "userexample.com", ""])(
+  it.each(["user@gmail.com", "user@example.com.other.test", "user@sub.example.com", "userexample.com", ""])(
     "rejects %j",
     async (email) => {
       await expect(run(event(email))).rejects.toThrow("ONLY_ALLOWED_DOMAIN");
@@ -53,10 +53,10 @@ describe("pre-sign-up trigger", () => {
     });
 
     it.each([
-      ["missing (a consumer Google account using a company address)", {}],
+      ["missing (a consumer Google account using an organization address)", {}],
       ["another Workspace", { "custom:hd": "other.com" }],
       ["a subdomain", { "custom:hd": "sub.example.com" }],
-      ["a lookalike", { "custom:hd": "example.com.evil.com" }],
+      ["a lookalike", { "custom:hd": "example.com.other.test" }],
       ["empty", { "custom:hd": "" }],
     ])("rejects it when %s", async (_, extra) => {
       await expect(run(event("user@example.com", "PreSignUp_ExternalProvider", extra))).rejects.toThrow(

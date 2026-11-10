@@ -42,8 +42,8 @@ describe("demo-launch CloudFront Function", () => {
     ["no entry path", `/_launch/${ID}/`],
     ["no id", "/_launch//index.html"],
     ["an id with a dot", "/_launch/a.b/index.html"],
-    ["a protocol-relative entry", `/_launch/${ID}//evil.example/x`],
-    ["a backslash entry", `/_launch/${ID}/\\evil.example`],
+    ["a protocol-relative entry", `/_launch/${ID}//other.example/x`],
+    ["a backslash entry", `/_launch/${ID}/\\other.example`],
     ["another path", `/${ID}/index.html`],
   ])("rejects %s", (_, uri) => {
     const result = launch(uri);

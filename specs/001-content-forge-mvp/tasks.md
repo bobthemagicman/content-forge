@@ -182,7 +182,7 @@ that every story needs
   - `user@example.com` accepted;
   - `USER@Example.com` accepted;
   - `user@gmail.com` rejected;
-  - `user@example.com.evil.com` rejected;
+  - `user@example.com.other.test` rejected;
   - `user@sub.example.com` rejected;
   - missing email rejected;
   - `PreSignUp_ExternalProvider` and `PreSignUp_AdminCreateUser` sources.
@@ -649,7 +649,7 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   - `photo.jpg`;
   - `textures/stone.png`;
   - `misc.zip`: a PDF and a TXT;
-  - malicious archives `bad-traversal.zip` (`../evil.txt`) and `bad-absolute.zip` (`/etc/x`);
+  - unsafe archives `unsafe-traversal.zip` (`../outside.txt`) and `unsafe-absolute.zip` (`/etc/x`);
   - `wordpress-theme.zip`: `style.css` with a `Theme Name:` header.
 - [ ] T056 [P] [US4] Write unit tests in `tests/unit/ingest/sanitize.test.ts` that reject `..`
   segments, absolute paths, drive letters, more than 200k entries, more than 10 GiB uncompressed
@@ -690,7 +690,7 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
     'tests/fixtures/ingest/outputs.e2e.json', '--report', <tmp>])`, with **no** generator stubs:
     extraction, detection, Playwright screenshots, LibreOffice/poppler slides, and ffmpeg all run
     for real;
-  - assert the exit code is `1`, and that only the two malicious fixtures failed, each with a
+  - assert the exit code is `1`, and that only the two unsafe fixtures failed, each with a
     reason in the report;
   - assert, per fixture: the detected type; the `a/<id>/<file>` archive upload with its
     `Content-Disposition`; the expected `v/` keys, all sharing one import hash; that thumbnails
@@ -810,7 +810,7 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   report interpretation.
 - [ ] T079 [US4] Add a CI step to `.github/workflows/ci.yml` that runs
   `npm run ingest -- batch tests/fixtures/ingest --dry-run --report ingest-report.ci.json`. Assert
-  the exit code is `1`, because only the malicious fixtures fail, and that the report classifies
+  the exit code is `1`, because only the unsafe fixtures fail, and that the report classifies
   every other fixture correctly, using a small `scripts/ci/check-ingest-report.mjs`.
 
   Also add an `ingest-e2e` job that runs on pull requests touching `tools/ingest/**`,
@@ -818,7 +818,7 @@ correct type, thumbnail, and preview. A re-run produces no duplicates (quickstar
   poppler-utils libreoffice-impress`, then `npx playwright install --with-deps chromium`, then
   `npm run test:ingest-e2e` (T061).
 - [ ] T080 [US4] (owner) Run [quickstart §4](./quickstart.md#4-load-sample-content) against a
-  sandbox or `master`: `doctor`, then a dry run, then a real import of the non-malicious fixtures,
+  sandbox or `master`: `doctor`, then a dry run, then a real import of the safe fixtures,
   then a re-run, which should be all `skipped`. Confirm the items exist in DynamoDB and S3 with the
   expected keys (V11).
 
