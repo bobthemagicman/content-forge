@@ -258,14 +258,14 @@ scopes() { node -e 'console.log(JSON.parse(Buffer.from(process.argv[1].split("."
 # 1. The sign-in token: the scopes must not include aws.cognito.signin.user.admin.
 scopes "$ACCESS"
 aws cognito-idp update-user-attributes --no-sign-request --region us-west-2 --access-token "$ACCESS" \
-  --user-attributes Name=custom:hd,Value=attacker.test   # expect NotAuthorizedException
+  --user-attributes Name=custom:hd,Value=other.test   # expect NotAuthorizedException
 
 # 2. A refreshed token, the way Amplify refreshes.
 REFRESHED=$(aws cognito-idp get-tokens-from-refresh-token --no-sign-request --region us-west-2 \
   --client-id "$CLIENT_ID" --refresh-token "$REFRESH" --query AuthenticationResult.AccessToken --output text)
 scopes "$REFRESHED"
 aws cognito-idp update-user-attributes --no-sign-request --region us-west-2 --access-token "$REFRESHED" \
-  --user-attributes Name=custom:hd,Value=attacker.test   # expect NotAuthorizedException
+  --user-attributes Name=custom:hd,Value=other.test   # expect NotAuthorizedException
 
 unset ACCESS REFRESH REFRESHED; pbcopy < /dev/null
 ```

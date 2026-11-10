@@ -571,8 +571,8 @@ that account has its own bill.
     the preview session.
 - **Rationale**:
   - `cloudfront.net` is on the Public Suffix List, so each distribution host is its own site. A
-    hostile template can no longer set cookies on the owner's domain, send same-site requests to
-    the company's other apps, or phish on a company hostname. That replaces the accepted risk
+    untrusted template can no longer set cookies on the owner's domain, send same-site requests to
+    the organization's other apps, or phish on an organization hostname. That replaces the accepted risk
     recorded on 2026-11-07 (constitution 1.1.0, Principle II).
   - The cookies are set during a top-level navigation to the demo host, so they're first-party in
     every browser, including Safari and Firefox, which block or partition third-party cookies. A
@@ -603,7 +603,7 @@ that account has its own bill.
   - Templates share the demo origin's storage (`localStorage`, cookies they set themselves). A
     template could break another template's demo, which costs nothing but a reopen.
   - Phishing is still possible on the demo host, but on a random `*.cloudfront.net` name that
-    carries no company trust.
+    carries none of the organization's trust.
   - The demo host has no TLS 1.2 floor (2026-11-07 re-review). CloudFront applies a minimum
     protocol version only to a custom certificate, and the demo host always uses the default
     `*.cloudfront.net` one, which still accepts TLS 1.0 and 1.1. The same holds for a sandbox's

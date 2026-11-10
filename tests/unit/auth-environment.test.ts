@@ -59,7 +59,7 @@ describe("auth environment handover (research R21)", () => {
   it.each([
     ["userPoolId", "not a pool"],
     ["userPoolClientId", "UPPERCASE"],
-    ["domain", "evil.example.com"],
+    ["domain", "other.example.com"],
     ["appOrigin", "http://localhost:3000/path"],
     ["region", undefined],
     ["allowedEmailDomain", undefined],

@@ -48,7 +48,7 @@ export function describeTokenVerifierContract(name: string, make: MakeVerifier) 
     });
 
     const refusals: [string, (key: Key) => Promise<string>][] = [
-      ["a token from another issuer", (key) => new SignJWT({ token_use: "id" }).setProtectedHeader({ alg: "RS256", kid: "key-1" }).setIssuer("https://evil.example.com/pool").setAudience(AUDIENCE).setIssuedAt().setExpirationTime("1h").sign(key)],
+      ["a token from another issuer", (key) => new SignJWT({ token_use: "id" }).setProtectedHeader({ alg: "RS256", kid: "key-1" }).setIssuer("https://other.example.com/pool").setAudience(AUDIENCE).setIssuedAt().setExpirationTime("1h").sign(key)],
       ["a token for another client", (key) => new SignJWT({ token_use: "id" }).setProtectedHeader({ alg: "RS256", kid: "key-1" }).setIssuer(ISSUER).setAudience("other-client").setIssuedAt().setExpirationTime("1h").sign(key)],
       ["an expired token", (key) => new SignJWT({ token_use: "id" }).setProtectedHeader({ alg: "RS256", kid: "key-1" }).setIssuer(ISSUER).setAudience(AUDIENCE).setIssuedAt(Math.floor(Date.now() / 1000) - 7200).setExpirationTime(Math.floor(Date.now() / 1000) - 3600).sign(key)],
       ["a token without an expiry", (key) => new SignJWT({ token_use: "id" }).setProtectedHeader({ alg: "RS256", kid: "key-1" }).setIssuer(ISSUER).setAudience(AUDIENCE).setIssuedAt().sign(key)],

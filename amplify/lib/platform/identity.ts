@@ -4,7 +4,7 @@ import type { Claims } from "./ports";
  * Whether verified claims belong to a member of the allowed Google Workspace (contracts/assets-cdn.md,
  * Principle II): a verified address in `allowedDomain`, and that domain as the account's hosted
  * domain. Only Workspace accounts have a hosted domain, so this refuses a consumer Google account
- * using a company address. `hostedDomainClaim` is where the broker puts Google's `hd` (Cognito maps
+ * using an organization address. `hostedDomainClaim` is where the broker puts Google's `hd` (Cognito maps
  * it to `custom:hd`, infra/auth/lib/auth-stack.ts).
  */
 export function isWorkspaceMember(claims: Claims, allowedDomain: string, hostedDomainClaim: string): boolean {
